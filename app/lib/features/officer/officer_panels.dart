@@ -1,16 +1,17 @@
 import 'package:flutter/material.dart';
+
 import '../../core/i18n.dart';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app_router.dart';
 import '../../core/auth/session.dart';
 import '../../core/flag_strings.dart';
 import '../../core/format.dart';
-import '../../core/theme/tokens.dart';
 import '../../core/widgets/claude_draft_sheet.dart';
-import '../../core/widgets/saarthee.dart';
+import '../../core/widgets/ui.dart';
 import '../audit/audit_screen.dart';
-import '../citizen/citizen_panels.dart';
+import '../citizen/citizen_panels.dart' show AskWardPage;
 import '../citizen/report_card.dart';
 import '../corporator/corporator_panels.dart';
 import '../map/map_data.dart';
@@ -29,8 +30,8 @@ void openRoad(String id, {String? wo}) => appRouter.push(Uri(path: '/road', quer
 /// Recovery notice for one flag type on a road or across a ward. The server
 /// picks the flag rows; the client sends only the scope.
 Future<void> showNoticeSheet(BuildContext context, {required String type, String? roadId, String? wardCode}) async {
-  if (!await ensureRole(context, roles: {'officer'}, why: 'Recovery notices are drafted by the ward officer. Sign in as a ward officer to draft one.')) return;
-  if (!context.mounted) return;
+  const why = 'Recovery notices are drafted by the ward officer. Sign in as a ward officer to draft one.';
+  if (!await ensureRole(context, roles: {'officer'}, why: why) || !context.mounted) return;
   await showClaudeDraftSheet(
     context,
     title: 'Recovery notice',
@@ -42,155 +43,303 @@ Future<void> showNoticeSheet(BuildContext context, {required String type, String
 /// Officer actions show for officers, and for signed-out visitors (who get a sign-in prompt on tap).
 bool canDraftNotice(String? role) => role == null || role == 'officer';
 
+/// Map line colour of a flag (legacy; the map and About use it). Screens use [flagTone].
 Color flagColor(String type) => roadStatusColors[type] ?? const Color(0xFF8D6E63);
 
-Widget _flagDot(String type) => Container(
-  width: 12,
-  height: 12,
-  decoration: BoxDecoration(color: flagColor(type), shape: BoxShape.circle),
+/// Status tone of a flag (plan §1): warranty = info, above rate and repeat = review,
+/// failed = error, slower = warning, clean = success.
+StatusTone flagTone(String type) => switch (type) {
+  'dlp_paid' => StatusTone.info,
+  'over_rate' || 'double_billing' => StatusTone.review,
+  'fix_failed' => StatusTone.error,
+  'sla_missed' => StatusTone.warning,
+  'clean' => StatusTone.success,
+  _ => StatusTone.neutral,
+};
+
+Color flagToneColor(BuildContext context, String type) => StatusChip.colors(SaartheeColors.of(context), flagTone(type)).$1;
+
+/// 40 px grey well with the flag's 12 px colour dot (leading of a ListRow).
+Widget _flagWell(BuildContext context, String type) => Container(
+  width: 40,
+  height: 40,
+  alignment: Alignment.center,
+  decoration: BoxDecoration(color: SaartheeColors.of(context).surfaceAlt, shape: BoxShape.circle),
+  child: Container(
+    width: AppSpacing.timelineDot,
+    height: AppSpacing.timelineDot,
+    decoration: BoxDecoration(color: flagToneColor(context, type), shape: BoxShape.circle),
+  ),
 );
+
+/// "2024-02-24" or "2025-06-10 07:51" -> "24 Feb 2024".
+String _day(Object? s) {
+  final d = DateTime.tryParse('${s ?? ''}');
+  if (d == null) return '—';
+  const m = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  return '${d.day} ${m[d.month - 1]} ${d.year}';
+}
+
+/// Section heading inside a page body (headline 24/700, 12 below).
+Widget _heading(BuildContext context, String text) => Padding(
+  padding: const EdgeInsets.only(bottom: AppSpacing.sectionTitleBottom),
+  child: Semantics(header: true, child: Text(text, style: context.type.headline)),
+);
+
+/// Draft a recovery notice: straight away for one flag type, else pick the type in a sheet.
+Future<void> _draftNotice(BuildContext context, List<String> types, {String? roadId, String? wardCode}) async {
+  final type = types.length == 1
+      ? types.single
+      : await showAppSheet<String>(
+          context,
+          title: kDraftNotice,
+          builder: (sheet) => Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              for (final k in types)
+                ListRow(leading: _flagWell(sheet, k), title: flagLabel(k), caption: flagStanding(k), onTap: () => Navigator.pop(sheet, k)),
+            ],
+          ),
+        );
+  if (type != null && context.mounted) await showNoticeSheet(context, type: type, roadId: roadId, wardCode: wardCode);
+}
 
 // ---------------------------------------------------------------- ward panel
 
+/// Ward page body (also My Ward's): spend against budget, rupees to review by flag
+/// type, tools, never-fixed complaints, top contractors and repair methods.
 class WardPanel extends ConsumerWidget {
   const WardPanel(this.code, {super.key, this.header});
   final String code;
 
-  /// Shown above the figures (My Ward's change-ward card).
+  /// Shown above the figures (My Ward's title and change-ward pill); stays while loading.
   final Widget? header;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) => asyncPage(
-    ref.watch(wardDetailProvider(code)),
-    onRetry: () => ref.invalidate(wardDetailProvider(code)),
-    data: (w) => _body(context, ref, w),
-  );
+  Widget build(BuildContext context, WidgetRef ref) {
+    final v = ref.watch(wardDetailProvider(code));
+    return Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: AppSpacing.maxContent),
+        child: ListView(
+          primary: true,
+          padding: EdgeInsets.only(top: header == null ? AppSpacing.s16 : 0, bottom: MediaQuery.paddingOf(context).bottom + AppSpacing.s32),
+          children: [
+            ?header,
+            ...switch (v) {
+              AsyncData(:final value) => _body(context, ref, value),
+              AsyncError(:final error) => [
+                ErrorState(message: 'Could not load this ward.\n$error', onRetry: () => ref.invalidate(wardDetailProvider(code))),
+              ],
+              _ => [
+                Gutter(
+                  child: Skeleton(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: const [
+                        SkeletonBox(height: 14, widthFactor: 0.4),
+                        SizedBox(height: AppSpacing.s8),
+                        SkeletonBox(height: 40, widthFactor: 0.6),
+                        SizedBox(height: AppSpacing.s16),
+                        SkeletonBox(height: 8),
+                        SizedBox(height: AppSpacing.s32),
+                        SkeletonBox(height: 24, widthFactor: 0.5),
+                        SizedBox(height: AppSpacing.s16),
+                        SkeletonBox(height: 12),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: AppSpacing.s16),
+                Skeleton.rows(count: 4),
+              ],
+            },
+          ],
+        ),
+      ),
+    );
+  }
 
-  Widget _body(BuildContext context, WidgetRef ref, Json w) {
+  List<Widget> _body(BuildContext context, WidgetRef ref, Json w) {
     final role = ref.watch(sessionProvider)?.role;
-    final c = SaartheeColors.of(context);
-    final t = Theme.of(context).textTheme;
+    final t = context.type;
     final budget = w['budget'] as num? ?? 0;
     final spend = w['spend'] as num? ?? 0;
     final remaining = w['remaining'] as num? ?? budget - spend;
     final byType = (w['by_flag_type'] as Map?) ?? const {};
-    final types = [for (final k in flagOrder) if (((byType[k] as Map?)?['count'] as num? ?? 0) > 0) k];
+    num count(String k) => (byType[k] as Map?)?['count'] as num? ?? 0;
+    num inr(String k) => (byType[k] as Map?)?['inr'] as num? ?? 0;
+    final types = [
+      for (final k in flagOrder)
+        if (count(k) > 0) k,
+    ];
+    final moneyTypes = [
+      for (final k in types)
+        if (k != 'sla_missed' && inr(k) > 0) k,
+    ];
+    final noticeTypes = [
+      for (final k in types)
+        if (noticeFlagTypes.contains(k)) k,
+    ];
     final contractors = ((w['by_contractor'] as List?) ?? const []).take(5).toList();
     final methods = ((w['by_method'] as List?) ?? const []).take(5).toList();
     final maxC = contractors.isEmpty ? 1 : contractors.first['inr'] as num;
     final maxM = methods.isEmpty ? 1 : methods.first['inr'] as num;
+    final neverFixed = (w['never_fixed'] as List? ?? const []).length;
 
-    return PanelList(
-      children: [
-        ?header,
-        const SectionTitle('Budget and spend'),
-        LinearProgressIndicator(
-          value: budget <= 0 ? 1 : (spend / budget).clamp(0, 1).toDouble(),
-          minHeight: 10,
-          borderRadius: BorderRadius.circular(5),
-          color: remaining < 0 ? c.error : c.primary,
+    // (label, pictogram or art, tap)
+    final toolList = <(String, PictogramKind?, Widget?, VoidCallback)>[
+      (kWardBrief, PictogramKind.brief, null, () => showWardBrief(context, code)),
+      (context.tr(kReportCard), PictogramKind.reportCard, null, () => pushPanel(PanelPage(kReportCard, ReportCardPage(ward: code)))),
+      (context.tr(kAskWard), PictogramKind.ask, null, () => pushPanel(PanelPage(kAskWard, AskWardPage(ward: code)))),
+      ('Complaint trail', PictogramKind.trail, null, () => openTrail(code)),
+      if (role != 'citizen') ('Next rupee', PictogramKind.nextRupee, null, () => showNextRupee(ref, code)),
+      (
+        kContractorsInWard,
+        PictogramKind.contractors,
+        null,
+        () => pushPanel(PanelPage('$kContractorsInWard · Ward $code', ScorecardList(ward: code))),
+      ),
+      if (noticeTypes.isNotEmpty && canDraftNotice(role))
+        (
+          kDraftNotice,
+          null,
+          const Icon(Icons.edit_note, size: AppSpacing.pictogram),
+          () => _draftNotice(context, noticeTypes, wardCode: code),
         ),
-        const SizedBox(height: AppSpacing.s4),
-        Row(
+    ];
+    // Lead with enough wide tiles (in pairs) that the square rows of three come out full.
+    final wide = [0, 2, 4].firstWhere((k) => (toolList.length - k) % 3 == 0, orElse: () => 0);
+    final tools = [
+      for (final (i, (label, pic, art, tap)) in toolList.indexed)
+        Tile(label: label, pictogram: pic, art: art, onTap: tap, size: i < wide ? TileSize.wide : TileSize.square),
+    ];
+
+    return [
+      Gutter(
+        child: HeroFigure(
+          caption: 'Spent of ${formatInr(budget)} budget',
+          value: spend,
+          format: formatInr,
+          explanation: remaining < 0 ? 'Over budget by ${formatInr(-remaining)}' : '${formatInr(remaining)} left this season',
+          action: ProgressBar(value: budget <= 0 ? 1 : (spend / budget).toDouble(), height: 8, semanticLabel: 'Spend against budget'),
+        ),
+      ),
+      const SectionBreak(space: AppSpacing.s32),
+      Gutter(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Expanded(child: Text('Spent ${formatInr(spend)}', style: t.bodyMedium)),
-            Text('Budget ${formatInr(budget)}', style: t.bodyMedium),
+            Semantics(header: true, child: Text('To review: ${formatInr(w['flagged_inr'] as num? ?? 0)}', style: t.headline)),
+            const SizedBox(height: AppSpacing.s4),
+            Text('${formatPercent(w['flagged_share'] as num? ?? 0)} of spend in this ward needs review', style: t.caption),
+            if (moneyTypes.isNotEmpty) ...[
+              const SizedBox(height: AppSpacing.s16),
+              _StackedBar([for (final k in moneyTypes) (flagToneColor(context, k), inr(k))]),
+            ],
           ],
         ),
-        Text(
-          remaining < 0 ? 'Over budget by ${formatInr(-remaining)}' : '${formatInr(remaining)} left this season',
-          style: t.bodySmall?.copyWith(color: remaining < 0 ? c.error : c.textSecondary),
+      ),
+      const SizedBox(height: AppSpacing.s8),
+      if (types.isEmpty)
+        const Gutter(
+          child: InfoPanel(icon: Icons.verified_outlined, tone: StatusTone.success, text: 'No flags in this ward.'),
         ),
-        const SectionTitle('Rupees to review'),
-        Text(formatInr(w['flagged_inr'] as num? ?? 0), style: t.headlineMedium?.copyWith(color: c.error)),
-        Text('${formatPercent(w['flagged_share'] as num? ?? 0)} of spend in this ward needs review', style: t.bodyMedium),
-        const SizedBox(height: AppSpacing.s8),
-        if (types.isEmpty)
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: AppSpacing.s12),
-            child: Row(
-              children: [
-                Icon(Icons.verified_outlined, color: c.success),
-                const SizedBox(width: AppSpacing.s8),
-                const Expanded(child: Text('No flags in this ward.')),
-              ],
-            ),
-          ),
-        for (final type in types) ...[
-          ListTile(
-            contentPadding: EdgeInsets.zero,
-            leading: _flagDot(type),
-            minLeadingWidth: 12,
-            title: Text(flagLabel(type)),
-            subtitle: Text(
-              type == 'sla_missed'
-                  ? '${byType[type]['count']} jobs · $kSlaNoMoney'
-                  : '${byType[type]['count']} jobs · ${flagStanding(type)}',
-            ),
-            trailing: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if (type != 'sla_missed') Text(formatInr(byType[type]['inr'] as num), style: t.labelLarge),
-                const Icon(Icons.chevron_right),
-              ],
-            ),
+      for (final (i, type) in types.indexed)
+        StaggeredEntrance(
+          index: i,
+          child: ListRow(
+            leading: _flagWell(context, type),
+            title: flagLabel(type),
+            caption: type == 'sla_missed' ? '${count(type)} jobs · $kSlaNoMoney' : '${count(type)} jobs · ${flagStanding(type)}',
+            amount: type == 'sla_missed' ? null : formatInr(inr(type)),
+            divider: i < types.length - 1,
             onTap: () => pushPanel(PanelPage('${flagLabel(type)} · Ward $code', AuditList(ward: code, type: type, allowAllMumbai: false))),
           ),
-          if (noticeFlagTypes.contains(type) && canDraftNotice(role))
-            Align(
-              alignment: Alignment.centerLeft,
-              child: Padding(
-                padding: const EdgeInsets.only(left: AppSpacing.s20, bottom: AppSpacing.s4),
-                child: TextButton.icon(
-                  onPressed: () => showNoticeSheet(context, type: type, wardCode: code),
-                  icon: const Icon(Icons.edit_note),
-                  label: const Text(kDraftNotice),
+        ),
+      if (types.isNotEmpty) Gutter(child: Text(kFlagsOverlap, style: t.caption)),
+      const SectionBreak(space: AppSpacing.s32),
+      // One set of tools; the brief comes first for everyone.
+      Gutter(child: _heading(context, role == 'corporator' ? 'Your tools' : 'More about this ward')),
+      Gutter(child: TileGrid(tiles: tools, squareColumns: 3)),
+      if (neverFixed > 0) ...[
+        const SizedBox(height: AppSpacing.s12),
+        ListRow(
+          icon: Icons.report_outlined,
+          title: '$neverFixed complaints never fixed',
+          caption: 'Open the complaint trail for this ward',
+          divider: false,
+          onTap: () => openTrail(code),
+        ),
+      ],
+      const SectionBreak(space: AppSpacing.s32),
+      Gutter(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _heading(context, 'Top contractors by spend'),
+            if (contractors.isEmpty) Text('No work orders in this ward.', style: t.caption),
+            for (final k in contractors)
+              LabelledBar(
+                label: '${k['name']} · ${k['jobs']} jobs',
+                value: k['inr'] as num,
+                max: maxC,
+                trailing: formatInr(k['inr'] as num),
+              ),
+            const SizedBox(height: AppSpacing.s32),
+            _heading(context, 'Repair methods by spend'),
+            if (methods.isEmpty) Text('No work orders in this ward.', style: t.caption),
+            for (final m in methods)
+              LabelledBar(
+                label: '${m['method']} · ${m['jobs']} jobs',
+                value: m['inr'] as num,
+                max: maxM,
+                trailing: formatInr(m['inr'] as num),
+              ),
+          ],
+        ),
+      ),
+    ];
+  }
+}
+
+/// One horizontal bar split by flag type (rupees), growing in on first paint.
+class _StackedBar extends StatelessWidget {
+  const _StackedBar(this.parts);
+  final List<(Color, num)> parts;
+  @override
+  Widget build(BuildContext context) {
+    final total = parts.fold<num>(0, (s, p) => s + p.$2);
+    return ExcludeSemantics(
+      child: TweenAnimationBuilder<double>(
+        tween: Tween(begin: 0, end: 1),
+        duration: AppMotion.of(context, AppMotion.count),
+        curve: AppMotion.countCurve,
+        builder: (_, k, _) => ClipRRect(
+          borderRadius: AppRadii.pillRadius,
+          child: SizedBox(
+            height: AppSpacing.s12,
+            child: Align(
+              alignment: AlignmentDirectional.centerStart,
+              child: FractionallySizedBox(
+                widthFactor: k,
+                child: Row(
+                  children: [
+                    for (final (i, p) in parts.indexed)
+                      Expanded(
+                        flex: total <= 0 ? 1 : (p.$2 / total * 1000).round().clamp(1, 1000),
+                        child: Container(
+                          margin: EdgeInsetsDirectional.only(start: i == 0 ? 0 : 2),
+                          color: p.$1,
+                        ),
+                      ),
+                  ],
                 ),
               ),
             ),
-        ],
-        if (types.isNotEmpty) Text(kFlagsOverlap, style: t.bodySmall?.copyWith(color: c.textSecondary)),
-        const SizedBox(height: AppSpacing.s16),
-        // One list of tools; the corporator's brief comes first.
-        SectionHeading(role == 'corporator' ? 'Your tools' : 'More about this ward'),
-        if (role == 'corporator') NavCard(icon: Icons.description_outlined, title: kWardBrief, subtitle: 'One page in English, हिंदी or मराठी', onTap: () => showWardBrief(context, code)),
-        if (role != 'citizen')
-          NavCard(icon: Icons.place_outlined, title: kNextRupeeAction, subtitle: 'Open issues ranked by need, within the budget left', onTap: () => showNextRupee(ref, code)),
-        NavCard(
-          icon: Icons.account_tree_outlined,
-          title: 'Complaint trail',
-          subtitle: 'Complaints → issues → work orders → what happened',
-          onTap: () => openTrail(code),
-        ),
-        NavCard(
-          icon: Icons.engineering_outlined,
-          title: kContractorsInWard,
-          subtitle: 'Scorecards, A to Z',
-          onTap: () => pushPanel(PanelPage('$kContractorsInWard · Ward $code', ScorecardList(ward: code))),
-        ),
-        if (role != 'corporator') NavCard(icon: Icons.description_outlined, title: kWardBrief, subtitle: 'One page in English, हिंदी or मराठी', onTap: () => showWardBrief(context, code)),
-        NavCard(icon: Icons.ios_share, title: context.tr(kReportCard), subtitle: context.tr('A shareable card of your ward’s road repairs.'), onTap: () => pushPanel(PanelPage(kReportCard, ReportCardPage(ward: code)))),
-        NavCard(icon: Icons.question_answer_outlined, title: context.tr(kAskWard), subtitle: context.tr('A polite question to the ward office, with the figures.'), onTap: () => pushPanel(PanelPage(kAskWard, AskWardPage(ward: code)))),
-        const SectionTitle('Top contractors by spend'),
-        if (contractors.isEmpty) const Text('No work orders in this ward.'),
-        for (final k in contractors)
-          LabelledBar(
-            label: '${k['name']} · ${k['jobs']} jobs',
-            value: k['inr'] as num,
-            max: maxC,
-            trailing: formatInr(k['inr'] as num),
           ),
-        const SectionTitle('Repair methods by spend'),
-        if (methods.isEmpty) const Text('No work orders in this ward.'),
-        for (final m in methods)
-          LabelledBar(
-            label: '${m['method']} · ${m['jobs']} jobs',
-            value: m['inr'] as num,
-            max: maxM,
-            trailing: formatInr(m['inr'] as num),
-            color: c.info,
-          ),
-      ],
+        ),
+      ),
     );
   }
 }
@@ -201,7 +350,7 @@ class RoadPanel extends ConsumerWidget {
   const RoadPanel(this.id, {super.key, this.focusWo});
   final String id;
 
-  /// Work order opened from a flag row: shown first with its evidence open, and marked in the timeline.
+  /// Work order opened from a flag row: scrolled into view with its evidence open, flashed once.
   final String? focusWo;
 
   @override
@@ -217,240 +366,270 @@ class RoadPanel extends ConsumerWidget {
       return PanelMessage.error('Could not load this road.\n${road.error ?? flags.error}', onRetry: retry);
     }
     if (!road.hasValue || !flags.hasValue) return const PanelMessage.loading();
-    return _body(context, road.requireValue, flags.requireValue, canDraftNotice(ref.watch(sessionProvider)?.role));
-  }
-
-  Widget _body(BuildContext context, Json r, List<dynamic> flags, bool canNotice) {
-    final c = SaartheeColors.of(context);
-    final t = Theme.of(context).textTheme;
-    final status = r['status'] as String? ?? 'clean';
-    final wos = [...(r['work_orders'] as List? ?? const [])]
-      ..sort((a, b) => '${a['assigned_at']}'.compareTo('${b['assigned_at']}'));
+    final r = road.requireValue;
+    final fs = flags.requireValue;
     final noticeTypes = [
-      if (canNotice)
-        for (final k in flagOrder) if (noticeFlagTypes.contains(k) && flags.any((f) => f['type'] == k)) k,
+      if (canDraftNotice(ref.watch(sessionProvider)?.role))
+        for (final k in flagOrder)
+          if (noticeFlagTypes.contains(k) && fs.any((f) => f['type'] == k)) k,
     ];
+    return Scaffold(
+      backgroundColor: SaartheeColors.of(context).background,
+      body: _RoadBody(road: r, flags: fs, focusWo: focusWo),
+      bottomNavigationBar: noticeTypes.isEmpty
+          ? null
+          : BottomActionBar(
+              child: PrimaryButton(
+                label: kDraftNotice,
+                icon: Icons.edit_note,
+                onPressed: () => _draftNotice(context, noticeTypes, roadId: id),
+              ),
+            ),
+    );
+  }
+}
+
+class _RoadBody extends StatelessWidget {
+  const _RoadBody({required this.road, required this.flags, this.focusWo});
+  final Json road;
+  final List<dynamic> flags;
+  final String? focusWo;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = SaartheeColors.of(context);
+    final t = context.type;
+    final r = road;
+    final status = r['status'] as String? ?? 'clean';
+    // Newest first.
+    final wos = [...(r['work_orders'] as List? ?? const [])]..sort((a, b) => '${b['assigned_at']}'.compareTo('${a['assigned_at']}'));
+    final failed = wos.where((w) => w['reopened'] == true).length;
     Json? flagFor(String wo, String type) =>
         flags.cast<Json?>().firstWhere((f) => f!['work_order_id'] == wo && f['type'] == type, orElse: () => null);
+    final resurfaced = flags
+        .cast<Json>()
+        .where((f) => f['type'] == 'dlp_paid')
+        .map((f) => (f['evidence'] as Map?)?['last_resurfaced'])
+        .nonNulls
+        .firstOrNull;
 
-    return PanelList(
-      children: [
-        Wrap(
-          spacing: AppSpacing.s8,
-          runSpacing: AppSpacing.s4,
+    return Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: AppSpacing.maxContent),
+        child: ListView(
+          primary: true,
+          padding: const EdgeInsets.only(top: AppSpacing.s8, bottom: AppSpacing.s32),
           children: [
-            if (status == 'clean' && flags.any((f) => f['type'] == 'sla_missed'))
-              Tag(kSlowerSomeJobs, bg: c.warningTint, fg: c.warning)
+            Gutter(
+              child: Wrap(
+                spacing: AppSpacing.s8,
+                runSpacing: AppSpacing.s8,
+                children: [
+                  if (status == 'clean' && flags.any((f) => f['type'] == 'sla_missed'))
+                    const StatusChip(kSlowerSomeJobs, tone: StatusTone.warning, dot: true)
+                  else
+                    StatusChip(roadStatusLabels[status] ?? status, tone: flagTone(status), dot: true),
+                  StatusChip('Ward ${r['ward_code']} · ${r['road_type'] ?? ''}'),
+                ],
+              ),
+            ),
+            if (r['under_dlp'] == 'Y') ...[
+              const SizedBox(height: AppSpacing.s16),
+              Gutter(
+                child: InfoPanel(
+                  icon: Icons.verified_user_outlined,
+                  tone: StatusTone.info,
+                  text:
+                      'Under contractor warranty.${resurfaced == null ? '' : ' Resurfaced ${_day(resurfaced)}.'} '
+                      'Repairs in this period are to be claimed and verified.',
+                ),
+              ),
+            ],
+            const SizedBox(height: AppSpacing.s16),
+            Gutter(
+              child: StatRow(
+                tiles: [
+                  StatTile.count(count: r['spend'] as num? ?? 0, format: formatInr, label: 'spent'),
+                  StatTile.count(count: wos.length, label: wos.length == 1 ? 'job' : 'jobs'),
+                  StatTile.count(count: failed, label: 'failed', color: failed > 0 ? c.error : null, dot: failed > 0 ? c.error : null),
+                ],
+              ),
+            ),
+            const SectionBreak(space: AppSpacing.s32),
+            Gutter(child: _heading(context, 'Work orders')),
+            if (wos.isEmpty)
+              const EmptyState(message: 'No work orders on this road.', pictogram: PictogramKind.pothole)
             else
-              Tag(roadStatusLabels[status] ?? status, bg: flagColor(status).withValues(alpha: 0.12), fg: flagColor(status)),
-            if (r['under_dlp'] == 'Y') Tag(kUnderWarranty, bg: c.infoTint, fg: c.info, icon: Icons.verified_user_outlined),
-            Tag('Ward ${r['ward_code']} · ${r['road_type'] ?? ''}', bg: c.surfaceAlt, fg: c.textSecondary),
+              Gutter(
+                child: Timeline(
+                  steps: [
+                    for (final wo in wos.cast<Json>())
+                      () {
+                        final types = [
+                          for (final k in flagOrder)
+                            if ((wo['flags'] as List? ?? const []).contains(k)) k,
+                        ];
+                        return TimelineStep(
+                          title: '${wo['id']} · ${wo['contractor_name']}',
+                          meta: '${_day(wo['assigned_at'])} · ${wo['method']}',
+                          amount: formatInr(wo['cost_inr'] as num? ?? 0),
+                          state: TimelineNodeState.outcome,
+                          color: types.isEmpty ? c.success : flagToneColor(context, types.first),
+                          chip: types.isEmpty
+                              ? const StatusChip(kNoFlags, tone: StatusTone.success)
+                              : StatusChip(
+                                  flagShortLabels[types.first] ?? types.first,
+                                  tone: flagTone(types.first),
+                                  more: types.length - 1,
+                                ),
+                          child: _Evidence(wo: wo, types: types, flagFor: flagFor, focused: wo['id'] == focusWo),
+                        );
+                      }(),
+                  ],
+                ),
+              ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(AppSpacing.gutter, AppSpacing.s16, AppSpacing.gutter, 0),
+              child: Text(kFlagsOverlap, style: t.caption),
+            ),
           ],
         ),
-        const SizedBox(height: AppSpacing.s12),
-        Text(formatInr(r['spend'] as num? ?? 0), style: t.headlineMedium),
-        Text('spent on this segment across ${wos.length} work orders', style: t.bodyMedium),
-        // One filled button per screen: the first notice; any second one is outlined.
-        for (final (i, type) in noticeTypes.indexed) ...[
-          const SizedBox(height: AppSpacing.s8),
-          (i == 0 ? FilledButton.icon : OutlinedButton.icon)(
-            onPressed: () => showNoticeSheet(context, type: type, roadId: id),
-            icon: const Icon(Icons.edit_note),
-            label: Text('$kDraftNotice · ${flagShortLabels[type]}'),
+      ),
+    );
+  }
+}
+
+/// A work order's evidence, collapsed behind "Show evidence". The focused one starts
+/// open, scrolls into view and flashes its background once.
+class _Evidence extends StatefulWidget {
+  const _Evidence({required this.wo, required this.types, required this.flagFor, this.focused = false});
+  final Json wo;
+  final List<String> types;
+  final Json? Function(String wo, String type) flagFor;
+  final bool focused;
+  @override
+  State<_Evidence> createState() => _EvidenceState();
+}
+
+class _EvidenceState extends State<_Evidence> {
+  late bool _open = widget.focused;
+  bool _flash = false;
+  final _toggle = GlobalKey();
+
+  @override
+  void initState() {
+    super.initState();
+    if (!widget.focused) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted) return;
+      // Aim at the small toggle so the step's title stays in view above it.
+      final target = _toggle.currentContext;
+      if (target == null) return;
+      await Scrollable.ensureVisible(
+        target,
+        alignment: 0.3,
+        duration: AppMotion.of(context, AppMotion.pageIn),
+        curve: AppMotion.standardCurve,
+      );
+      if (!mounted) return;
+      setState(() => _flash = true);
+      await Future<void>.delayed(const Duration(milliseconds: 700));
+      if (mounted) setState(() => _flash = false);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final c = SaartheeColors.of(context);
+    final t = context.type;
+    final wo = widget.wo;
+    final complaints = (wo['linked_complaint_ids'] as List? ?? const []);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Pressable(
+          key: _toggle,
+          onTap: () => setState(() => _open = !_open),
+          scale: false,
+          borderRadius: AppRadii.pillRadius,
+          semanticLabel: _open ? 'Hide evidence for ${wo['id']}' : 'Show evidence for ${wo['id']}',
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(minHeight: AppSpacing.touchTarget),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(_open ? 'Hide evidence' : 'Show evidence', style: t.label.copyWith(fontWeight: FontWeight.w700)),
+                AnimatedRotation(
+                  turns: _open ? 0.5 : 0,
+                  duration: AppMotion.of(context, AppMotion.quick),
+                  child: const Icon(Icons.expand_more, size: AppSpacing.iconSmall + 2),
+                ),
+              ],
+            ),
           ),
-        ],
-        if (wos.cast<Json>().where((w) => w['id'] == focusWo).firstOrNull case final focus?) ...[
-          const SectionTitle('The work order you opened'),
-          _WorkOrderCard(wo: focus, flagFor: flagFor, focused: true),
-        ],
-        SectionTitle(context.tr('What happened')),
-        if (wos.isEmpty) const Text('No work orders on this road.'),
-        for (final (i, wo) in wos.indexed)
-          _TimelineStep(
-            date: '${wo['assigned_at']}'.split(' ').first,
-            color: (wo['flags'] as List? ?? const []).isEmpty ? c.success : flagColor(flagOrder.firstWhere((k) => (wo['flags'] as List).contains(k), orElse: () => 'sla_missed')),
-            last: i == wos.length - 1,
-            child: _WorkOrderCard(wo: wo as Json, flagFor: flagFor, marked: wo['id'] == focusWo),
-          ),
+        ),
+        AnimatedSize(
+          duration: AppMotion.of(context, AppMotion.standard),
+          curve: AppMotion.standardCurve,
+          alignment: AlignmentDirectional.topStart,
+          child: !_open
+              ? const SizedBox(width: double.infinity)
+              : AnimatedContainer(
+                  duration: AppMotion.of(context, AppMotion.standard),
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(AppSpacing.s14),
+                  decoration: BoxDecoration(color: _flash ? c.warningTint : c.surfaceAlt, borderRadius: AppRadii.tileRadius),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      EvidenceTable({
+                        'Billed': formatInr(wo['cost_inr'] as num? ?? 0),
+                        'Assigned': _day(wo['assigned_at']),
+                        'Completed': _day(wo['completed_at']),
+                        'Timing': wo['sla_met'] == true ? 'On time' : 'Slower than typical',
+                        'Re-opened within 30 days': wo['reopened'] == true ? 'Yes' : 'No',
+                        'Linked complaints': complaints.isEmpty ? 'None' : '${complaints.length}: ${complaints.join(', ')}',
+                      }),
+                      for (final type in widget.types) ...[
+                        const SizedBox(height: AppSpacing.s12),
+                        Row(
+                          children: [
+                            _flagWellSmall(context, type),
+                            const SizedBox(width: AppSpacing.s8),
+                            Expanded(
+                              child: Text(flagLabel(type), style: t.label.copyWith(fontWeight: FontWeight.w700)),
+                            ),
+                          ],
+                        ),
+                        Text(flagStanding(type), style: t.caption),
+                        if (widget.flagFor('${wo['id']}', type) case final f?)
+                          EvidenceTable(f['evidence'] as Map? ?? const {})
+                        else
+                          Text('No evidence row found for this flag.', style: t.caption),
+                      ],
+                      for (final issue in (wo['issue_ids'] as List? ?? const []))
+                        TextButton.icon(
+                          style: TextButton.styleFrom(padding: EdgeInsets.zero),
+                          onPressed: () => openIssue('$issue'),
+                          icon: const Icon(Icons.account_tree_outlined),
+                          label: Text('Complaint trail: $issue'),
+                        ),
+                    ],
+                  ),
+                ),
+        ),
       ],
     );
   }
 }
 
-/// One step of the road's timeline: dot, date, connector line and the work order card.
-class _TimelineStep extends StatelessWidget {
-  const _TimelineStep({required this.date, required this.color, required this.child, this.last = false});
-  final String date;
-  final Color color;
-  final Widget child;
-  final bool last;
-  @override
-  Widget build(BuildContext context) {
-    final c = SaartheeColors.of(context);
-    return IntrinsicHeight(
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          SizedBox(
-            width: AppSpacing.s24,
-            child: Column(
-              children: [
-                const SizedBox(height: AppSpacing.s4),
-                Container(
-                  width: AppSpacing.timelineDot,
-                  height: AppSpacing.timelineDot,
-                  decoration: BoxDecoration(shape: BoxShape.circle, color: color),
-                ),
-                if (!last) Expanded(child: Container(width: 2, color: c.border)),
-              ],
-            ),
-          ),
-          const SizedBox(width: AppSpacing.s8),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(date, style: Theme.of(context).textTheme.labelMedium?.copyWith(color: c.textSecondary)),
-                const SizedBox(height: AppSpacing.s4),
-                child,
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
+Widget _flagWellSmall(BuildContext context, String type) => Container(
+  width: AppSpacing.s8,
+  height: AppSpacing.s8,
+  decoration: BoxDecoration(color: flagToneColor(context, type), shape: BoxShape.circle),
+);
 
-class _WorkOrderCard extends StatelessWidget {
-  const _WorkOrderCard({required this.wo, required this.flagFor, this.focused = false, this.marked = false});
-  final Json wo;
-  final Json? Function(String wo, String type) flagFor;
-
-  /// Evidence open from the start.
-  final bool focused;
-
-  /// Outlined in the timeline (the work order the page was opened for).
-  final bool marked;
-
-  @override
-  Widget build(BuildContext context) {
-    final c = SaartheeColors.of(context);
-    final t = Theme.of(context).textTheme;
-    final types = [for (final k in flagOrder) if ((wo['flags'] as List? ?? const []).contains(k)) k];
-    final onTime = wo['sla_met'] == true;
-    final reopened = wo['reopened'] == true;
-    return Card(
-      margin: const EdgeInsets.only(bottom: AppSpacing.s12),
-      shape: RoundedRectangleBorder(
-        borderRadius: AppRadii.cardRadius,
-        side: BorderSide(color: focused || marked ? c.primary : c.border, width: focused || marked ? 2 : 1),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(AppSpacing.s12, AppSpacing.s12, AppSpacing.s12, AppSpacing.s4),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Expanded(child: Text('${wo['id']} · ${wo['method']}', style: t.titleSmall)),
-                const SizedBox(width: AppSpacing.s8),
-                Text(formatInr(wo['cost_inr'] as num? ?? 0), style: t.titleSmall),
-              ],
-            ),
-            Text('${wo['contractor_name']}', style: t.bodySmall),
-            Text('Assigned ${'${wo['assigned_at']}'.split(' ').first}, completed ${'${wo['completed_at'] ?? '—'}'.split(' ').first}',
-                style: t.bodySmall?.copyWith(color: c.textSecondary)),
-            const SizedBox(height: AppSpacing.s4),
-            Wrap(
-              spacing: AppSpacing.s4,
-              runSpacing: AppSpacing.s4,
-              children: [
-                Tag(onTime ? 'On time' : 'Slower than typical', bg: onTime ? c.successTint : c.warningTint, fg: onTime ? c.success : c.warning),
-                Tag(reopened ? 'Re-opened' : 'Not re-opened', bg: reopened ? c.errorTint : c.surfaceAlt, fg: reopened ? c.error : c.textSecondary),
-                // Timing is already shown by the on-time tag.
-                for (final type in types.where((t) => t != 'sla_missed'))
-                  Tag(flagShortLabels[type] ?? type, bg: flagColor(type).withValues(alpha: 0.12), fg: flagColor(type)),
-              ],
-            ),
-            for (final type in types)
-              ExpansionTile(
-                shape: const Border(),
-                tilePadding: EdgeInsets.zero,
-                dense: true,
-                initiallyExpanded: focused,
-                leading: _flagDot(type),
-                minTileHeight: 40,
-                title: Text(flagLabel(type)),
-                subtitle: Text('${flagStanding(type)} · tap for the numbers'),
-                childrenPadding: const EdgeInsets.only(left: AppSpacing.s24, bottom: AppSpacing.s8),
-                children: [
-                  if (flagFor('${wo['id']}', type) case final f?)
-                    EvidenceTable(f['evidence'] as Map? ?? const {})
-                  else
-                    const Text('No evidence row found for this flag.'),
-                ],
-              ),
-            if ((wo['linked_complaint_ids'] as List? ?? const []).isNotEmpty)
-              Text('Complaints: ${(wo['linked_complaint_ids'] as List).join(', ')}', style: t.bodySmall?.copyWith(color: c.textSecondary)),
-            for (final issue in (wo['issue_ids'] as List? ?? const []))
-              TextButton.icon(
-                style: TextButton.styleFrom(padding: EdgeInsets.zero),
-                onPressed: () => openIssue('$issue'),
-                icon: const Icon(Icons.account_tree_outlined),
-                label: Text('Complaint trail: $issue'),
-              ),
-            const SizedBox(height: AppSpacing.s8),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-// ---------------------------------------------------------------- hero
-
-/// The city-wide rupees billed on roads under warranty; tapping lists wards.
-class WarrantyHeroCard extends ConsumerWidget {
-  const WarrantyHeroCard({super.key, required this.data});
-  final MapData data;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final c = SaartheeColors.of(context);
-    final t = Theme.of(context).textTheme;
-    final dlp = (((data.meta['totals'] as Map?)?['flags'] as Map?)?['dlp_paid'] as Map?) ?? const {};
-    final inr = dlp['inr'] as num? ?? 0;
-    return Card(
-      color: c.surface,
-      elevation: 3,
-      child: InkWell(
-        borderRadius: AppRadii.cardRadius,
-        onTap: () => pushPanel(PanelPage('Billed under warranty, by ward', DlpWardRanking(data))),
-        child: Padding(
-          padding: const EdgeInsets.all(AppSpacing.s12),
-          child: Row(
-            children: [
-              Container(width: 4, height: 44, color: flagColor('dlp_paid')),
-              const SizedBox(width: AppSpacing.s12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(context.tr(heroLine('{amount}'), {'amount': formatInr(inr)}), style: t.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
-                    const SizedBox(height: 2),
-                    Text(context.tr('{n} jobs across Mumbai · tap to see wards', {'n': dlp['count'] ?? 0}), style: t.bodySmall),
-                  ],
-                ),
-              ),
-              const Icon(Icons.chevron_right),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
+// ---------------------------------------------------------------- warranty by ward
 
 class DlpWardRanking extends ConsumerWidget {
   const DlpWardRanking(this.data, {super.key});
@@ -462,25 +641,38 @@ class DlpWardRanking extends ConsumerWidget {
       ..sort((a, b) => (b.data['dlp_paid_inr'] as num).compareTo(a.data['dlp_paid_inr'] as num));
     if (wards.isEmpty) return const PanelMessage.empty('No ward has work billed under warranty.');
     final max = wards.first.data['dlp_paid_inr'] as num;
-    return PanelList(
-      children: [
-        Text('$kToBeClaimed. Tap a ward to see its work orders.', style: Theme.of(context).textTheme.bodyMedium),
-        const SizedBox(height: AppSpacing.s8),
-        for (final (i, w) in wards.indexed)
-          InkWell(
-            onTap: () => openWard(w.code),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: AppSpacing.s4),
-              child: LabelledBar(
-                label: '${i + 1}. ${w.code} · ${w.name} · ${w.data['dlp_paid_count']} jobs',
-                value: w.data['dlp_paid_inr'] as num,
-                max: max,
-                trailing: formatInr(w.data['dlp_paid_inr'] as num),
-                color: flagColor('dlp_paid'),
+    final c = SaartheeColors.of(context);
+    return Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: AppSpacing.maxContent),
+        child: ListView(
+          primary: true,
+          padding: const EdgeInsets.only(top: AppSpacing.s8, bottom: AppSpacing.s32),
+          children: [
+            Gutter(child: Text('$kToBeClaimed. Tap a ward to see its work orders.', style: context.type.caption)),
+            const SizedBox(height: AppSpacing.s8),
+            for (final (i, w) in wards.indexed)
+              StaggeredEntrance(
+                index: i,
+                child: ListRow(
+                  initials: '${i + 1}',
+                  title: '${w.code} · ${w.name}',
+                  caption: '${w.data['dlp_paid_count']} jobs',
+                  chip: Padding(
+                    padding: const EdgeInsets.only(top: AppSpacing.s4),
+                    child: ProgressBar(
+                      value: (w.data['dlp_paid_inr'] as num) / max,
+                      color: c.info,
+                      semanticLabel: 'Share of the largest ward',
+                    ),
+                  ),
+                  amount: formatInr(w.data['dlp_paid_inr'] as num),
+                  onTap: () => openWard(w.code),
+                ),
               ),
-            ),
-          ),
-      ],
+          ],
+        ),
+      ),
     );
   }
 }

@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -7,12 +6,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/api/api_client.dart';
 import '../../core/flag_strings.dart';
 import '../../core/format.dart';
+import '../../core/i18n.dart';
 import '../../core/prefs.dart';
-import '../../core/theme/tokens.dart';
-import '../../core/widgets/saarthee.dart';
+import '../../core/widgets/ui.dart';
 import '../map/map_data.dart';
 import '../officer/officer_panels.dart';
-import '../officer/panel.dart';
 import '../ward/ward_picker.dart';
 
 final _contractorsProvider = FutureProvider<List<dynamic>>(retry: (_, _) => null, (ref) => ref.watch(apiClientProvider).contractors());
@@ -24,33 +22,21 @@ class AuditScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final ward = ref.watch(chosenWardProvider);
     final name = ref.watch(mapDataProvider).value?.wardByCode[ward]?.name;
-    return Scaffold(
-      appBar: SaartheeAppBar(
-        title: 'Audit',
-        subtitle: 'Work orders that need review',
-        showBack: false,
-        actions: [
-          TextButton.icon(
-            onPressed: () => pickWard(context, ref),
-            icon: const Icon(Icons.location_on_outlined),
-            label: Text('Ward $ward'),
-          ),
-        ],
-      ),
-      // A new chosen ward starts a fresh list.
-      body: AuditList(key: ValueKey(ward), ward: ward, wardName: name),
-    );
+    // A new chosen ward starts a fresh list.
+    return AuditList(key: ValueKey(ward), ward: ward, wardName: name, title: context.tr('Audit'));
   }
 }
 
 /// Flag rows with filter chips, contractor filter, search, totals and paging.
 /// Also the body of "one flag type in a ward" pages ([type] preset).
+/// With a [title] it is a root tab page (large title, change-ward button).
 class AuditList extends ConsumerStatefulWidget {
-  const AuditList({super.key, required this.ward, this.wardName, this.type, this.allowAllMumbai = true});
+  const AuditList({super.key, required this.ward, this.wardName, this.type, this.allowAllMumbai = true, this.title});
   final String ward;
   final String? wardName;
   final String? type;
   final bool allowAllMumbai;
+  final String? title;
   @override
   ConsumerState<AuditList> createState() => _AuditListState();
 }
@@ -67,6 +53,7 @@ class _AuditListState extends ConsumerState<AuditList> {
   int _total = 0;
   num _totalInr = 0;
   bool _loading = false;
+  bool _loaded = false;
   String? _error;
   int _request = 0; // newer requests win
 
@@ -104,6 +91,7 @@ class _AuditListState extends ConsumerState<AuditList> {
         _items = [..._items, ...(r['items'] as List)];
         _total = r['total'] as int? ?? 0;
         _totalInr = r['total_inr'] as num? ?? 0;
+        _loaded = true;
       });
     } on ApiException catch (e) {
       if (mounted && id == _request) setState(() => _error = e.message);
@@ -117,184 +105,248 @@ class _AuditListState extends ConsumerState<AuditList> {
     _load(reset: true);
   }
 
+  String get _caption {
+    final n = _total == 1 ? '1 flag' : '$_total flags';
+    if (_type == 'sla_missed') return n;
+    return '$n · ${formatInr(_totalInr)} ${_type == 'dlp_paid' ? 'to be claimed and verified' : 'to review'}';
+  }
+
+  bool get _filtered => _contractor != null || _search.text.trim().isNotEmpty || _type != widget.type;
+
+  String get _emptyText {
+    final q = _search.text.trim();
+    if (q.isNotEmpty) return 'No work order or road matches "$q".';
+    final where = _allMumbai ? 'in Mumbai' : 'in Ward ${widget.ward}';
+    final who = _contractor == null ? '' : ' for this contractor';
+    if (_type != null) return 'No work orders $where$who are flagged "${flagShortLabels[_type] ?? _type}".';
+    return 'No work orders $where$who need review.';
+  }
+
+  Future<void> _pickContractor() async {
+    final contractors = ref.read(_contractorsProvider).value;
+    final picked = await showAppSheet<String>(
+      context,
+      title: 'Contractor',
+      builder: (sheet) => contractors == null
+          ? Skeleton.rows(count: 4)
+          : Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                ListRow(
+                  title: 'All contractors',
+                  chevron: false,
+                  trailing: _contractor == null ? const Icon(Icons.check) : null,
+                  onTap: () => Navigator.pop(sheet, ''),
+                ),
+                for (final k in contractors)
+                  ListRow(
+                    title: '${k['name']}',
+                    chevron: false,
+                    trailing: _contractor == k['id'] ? const Icon(Icons.check) : null,
+                    onTap: () => Navigator.pop(sheet, k['id'] as String),
+                  ),
+              ],
+            ),
+    );
+    if (picked == null || !mounted) return;
+    _set(() => _contractor = picked.isEmpty ? null : picked);
+  }
+
   @override
   Widget build(BuildContext context) {
     final c = SaartheeColors.of(context);
-    final t = Theme.of(context).textTheme;
+    final t = context.type;
     final contractors = ref.watch(_contractorsProvider).value ?? const [];
-    final header = <Widget>[
-      if (widget.allowAllMumbai)
-        Wrap(
-          spacing: AppSpacing.s8,
-          children: [
-            ChoiceChip(
-              label: Text('Ward ${widget.ward}${widget.wardName == null ? '' : ' · ${widget.wardName!.split(',').first}'}'),
-              selected: !_allMumbai,
-              onSelected: (_) => _set(() => _allMumbai = false),
+    final contractorName = contractors.cast<Map?>().firstWhere((k) => k?['id'] == _contractor, orElse: () => null)?['name'];
+    final root = widget.title != null;
+
+    // One row per work order: its first (largest) flag, other flags as "+n".
+    final byWo = <Object?, List<Map<String, dynamic>>>{};
+    for (final f in _items) {
+      (byWo[f['work_order_id']] ??= []).add(f as Map<String, dynamic>);
+    }
+    final rows = byWo.values.toList();
+    final more = _items.length < _total;
+
+    Widget footer() {
+      if (_error != null) {
+        return ErrorState(message: 'Could not load flags. $_error', onRetry: () => _load(reset: _items.isEmpty));
+      }
+      if (_loading || (more && _items.isNotEmpty)) {
+        // Reached the end: fetch the next page.
+        if (!_loading) WidgetsBinding.instance.addPostFrameCallback((_) => mounted && !_loading ? _load(reset: false) : null);
+        return Skeleton.rows(count: _items.isEmpty ? 6 : 3);
+      }
+      if (_items.isEmpty) {
+        return EmptyState(
+          message: _emptyText,
+          pictogram: PictogramKind.audit,
+          actionLabel: _filtered ? 'Clear filters' : null,
+          onAction: () => _set(() {
+            _contractor = null;
+            _type = widget.type;
+            _search.clear();
+          }),
+        );
+      }
+      return const SizedBox(height: AppSpacing.s16);
+    }
+
+    final slivers = <Widget>[
+      SliverToBoxAdapter(
+        child: Padding(
+          padding: EdgeInsets.fromLTRB(AppSpacing.gutter, root ? 0 : AppSpacing.s16, AppSpacing.gutter, AppSpacing.s16),
+          child: AnimatedSwitcher(
+            duration: AppMotion.of(context, AppMotion.standard),
+            layoutBuilder: (cur, prev) => Stack(alignment: AlignmentDirectional.topStart, children: [...prev, ?cur]),
+            child: Text(
+              _loaded ? _caption : ' ',
+              key: ValueKey(_loaded ? _caption : ''),
+              style: t.caption.copyWith(fontSize: 15, height: 22 / 15),
             ),
-            ChoiceChip(label: const Text('All Mumbai'), selected: _allMumbai, onSelected: (_) => _set(() => _allMumbai = true)),
-          ],
+          ),
         ),
-      const SizedBox(height: AppSpacing.s8),
-      SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        child: Row(
+      ),
+      SliverToBoxAdapter(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            for (final k in [null, ...flagOrder])
-              Padding(
-                padding: const EdgeInsets.only(right: AppSpacing.s8),
-                child: ChoiceChip(
-                  avatar: k == null ? null : CircleAvatar(backgroundColor: flagColor(k), radius: 5),
-                  label: Text(k == null ? 'All flags' : flagLabel(k)),
-                  selected: _type == k,
-                  onSelected: (_) => _set(() => _type = k),
+            if (widget.allowAllMumbai) ...[
+              Gutter(
+                child: SegmentedControl<bool>(
+                  segments: [(false, 'Ward ${widget.ward}'), (true, 'All Mumbai')],
+                  value: _allMumbai,
+                  onChanged: (v) => _set(() => _allMumbai = v),
                 ),
               ),
-          ],
-        ),
-      ),
-      const SizedBox(height: AppSpacing.s12),
-      TextField(
-        controller: _search,
-        textInputAction: TextInputAction.search,
-        decoration: InputDecoration(
-          prefixIcon: const Icon(Icons.search),
-          hintText: 'Work order id or road name',
-          suffixIcon: _search.text.isEmpty
-              ? null
-              : IconButton(
-                  tooltip: 'Clear search',
-                  icon: const Icon(Icons.close),
-                  onPressed: () => _set(_search.clear),
-                ),
-        ),
-        onChanged: (_) {
-          setState(() {});
-          _debounce?.cancel();
-          _debounce = Timer(const Duration(milliseconds: 350), () => _load(reset: true));
-        },
-        onSubmitted: (_) => _load(reset: true),
-      ),
-      const SizedBox(height: AppSpacing.s8),
-      DropdownMenu<String?>(
-        key: ValueKey('contractors-${contractors.length}'),
-        label: const Text('Contractor'),
-        expandedInsets: EdgeInsets.zero,
-        initialSelection: _contractor,
-        leadingIcon: const Icon(Icons.engineering_outlined),
-        dropdownMenuEntries: [
-          const DropdownMenuEntry<String?>(value: null, label: 'All contractors'),
-          for (final k in contractors) DropdownMenuEntry<String?>(value: k['id'] as String, label: '${k['name']}'),
-        ],
-        onSelected: (v) => _set(() => _contractor = v),
-      ),
-      const SizedBox(height: AppSpacing.s16),
-      Text.rich(
-        TextSpan(
-          children: [
-            TextSpan(text: _total == 1 ? '1 flag' : '$_total flags', style: t.titleMedium),
-            if (_type != 'sla_missed')
-              TextSpan(text: ' · ${formatInr(_totalInr)} ${_type == 'dlp_paid' ? 'to be claimed and verified' : 'to review'}', style: t.bodyMedium),
-          ],
-        ),
-      ),
-      Text(
-        _type == 'sla_missed' ? kSlaNoMoney : 'Biggest amounts first. Each work order counted once in the total.',
-        style: t.bodySmall,
-      ),
-      const SizedBox(height: AppSpacing.s8),
-    ];
-
-    final footer = <Widget>[
-      if (_error != null)
-        Card(
-          color: c.errorTint,
-          child: ListTile(
-            leading: Icon(Icons.error_outline, color: c.error),
-            title: Text('Could not load flags. $_error'),
-            trailing: TextButton(onPressed: () => _load(reset: _items.isEmpty), child: const Text('Retry')),
-          ),
-        )
-      else if (_loading)
-        const Padding(padding: EdgeInsets.all(AppSpacing.s16), child: Center(child: CircularProgressIndicator()))
-      else if (_items.isEmpty)
-        Padding(
-          padding: const EdgeInsets.symmetric(vertical: AppSpacing.s32),
-          child: Column(
-            children: [
-              Icon(Icons.inbox_outlined, size: 40, color: c.textSecondary),
               const SizedBox(height: AppSpacing.s8),
-              const Text('No work orders match these filters.', textAlign: TextAlign.center),
             ],
-          ),
-        )
-      else if (_items.length < _total)
-        Padding(
-          padding: const EdgeInsets.symmetric(vertical: AppSpacing.s12),
-          child: OutlinedButton(
-            onPressed: () => _load(reset: false),
-            child: Text('Load more (${_items.length} of $_total shown)'),
+            FilterChipRow(
+              children: [
+                FilterPill(
+                  label: contractorName == null ? 'Contractor' : '$contractorName',
+                  icon: Icons.engineering_outlined,
+                  selected: _contractor != null,
+                  onTap: _pickContractor,
+                ),
+                for (final k in [null, ...flagOrder])
+                  FilterPill(
+                    label: k == null ? 'All' : flagShortLabels[k] ?? k,
+                    selected: _type == k,
+                    onTap: () => _set(() => _type = k),
+                  ),
+              ],
+            ),
+          ],
+        ),
+      ),
+      SliverPersistentHeader(
+        pinned: true,
+        delegate: _PinnedSearch(
+          ColoredBox(
+            color: c.background,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.gutter, vertical: AppSpacing.s8),
+              child: SearchField(
+                controller: _search,
+                hint: 'Work order or road',
+                onChanged: (_) {
+                  _debounce?.cancel();
+                  _debounce = Timer(const Duration(milliseconds: 350), () => _load(reset: true));
+                },
+                onSubmitted: (_) => _load(reset: true),
+              ),
+            ),
           ),
         ),
+      ),
+      SliverToBoxAdapter(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(AppSpacing.gutter, AppSpacing.s4, AppSpacing.gutter, AppSpacing.s4),
+          child: Text(
+            _type == 'sla_missed' ? kSlaNoMoney : 'Biggest amounts first. Each work order counted once in the total.',
+            style: t.caption,
+          ),
+        ),
+      ),
+      SliverList.builder(
+        itemCount: rows.length + 1,
+        itemBuilder: (context, i) {
+          if (i == rows.length) return footer();
+          final r = rows[i];
+          return StaggeredEntrance(
+            key: ValueKey(r.first['work_order_id']),
+            index: i,
+            child: FlagRow(r.first, more: r.length - 1, showWard: _allMumbai, divider: i < rows.length - 1 || more),
+          );
+        },
+      ),
     ];
 
-    return LayoutBuilder(
-      builder: (context, box) {
-        final side = math.max(AppSpacing.gutter, (box.maxWidth - AppSpacing.maxContent) / 2 + AppSpacing.gutter);
-        return ListView.builder(
-          padding: EdgeInsets.fromLTRB(side, AppSpacing.s16, side, AppSpacing.s32),
-          itemCount: header.length + _items.length + footer.length,
-          itemBuilder: (context, i) {
-            if (i < header.length) return header[i];
-            i -= header.length;
-            if (i < _items.length) return FlagRow(_items[i] as Map<String, dynamic>);
-            return footer[i - _items.length];
-          },
-        );
-      },
+    if (root) {
+      return LargeTitleScaffold(
+        title: widget.title!,
+        actions: [RoundIconButton(icon: Icons.location_on_outlined, tooltip: 'Change ward (Ward ${widget.ward})', onPressed: () => pickWard(context, ref))],
+        onRefresh: () => _load(reset: true),
+        slivers: slivers,
+      );
+    }
+    return Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: AppSpacing.maxContent),
+        child: CustomScrollView(
+          primary: true,
+          slivers: [...slivers, const SliverPadding(padding: EdgeInsets.only(bottom: AppSpacing.s32))],
+        ),
+      ),
     );
   }
 }
 
-/// One flag: work order, road, contractor, amount and the one-line reason. Opens the road page on that work order.
+class _PinnedSearch extends SliverPersistentHeaderDelegate {
+  _PinnedSearch(this.child);
+  final Widget child;
+  static const double _height = AppSpacing.searchHeight + AppSpacing.s16;
+  @override
+  double get minExtent => _height;
+  @override
+  double get maxExtent => _height;
+  @override
+  Widget build(BuildContext context, double shrinkOffset, bool overlapsContent) => SizedBox.expand(child: child);
+  @override
+  bool shouldRebuild(_PinnedSearch old) => true;
+}
+
+/// One flagged work order: road, id and contractor, one status chip (other flags as "+n"),
+/// amount and the one-line reason. Opens the road page on that work order.
 class FlagRow extends StatelessWidget {
-  const FlagRow(this.f, {super.key});
+  const FlagRow(this.f, {super.key, this.more = 0, this.showWard = true, this.divider = true});
   final Map<String, dynamic> f;
+
+  /// Other flags on the same work order.
+  final int more;
+  final bool showWard;
+  final bool divider;
   @override
   Widget build(BuildContext context) {
     final c = SaartheeColors.of(context);
-    final t = Theme.of(context).textTheme;
+    final t = context.type;
     final type = f['type'] as String;
-    return Padding(
-      padding: const EdgeInsets.only(bottom: AppSpacing.s8),
-      child: Material(
-        color: c.surface,
-        shape: RoundedRectangleBorder(borderRadius: AppRadii.cardRadius, side: BorderSide(color: c.border)),
-        clipBehavior: Clip.antiAlias,
-        child: InkWell(
-          onTap: () => openRoad(f['road_id'] as String, wo: f['work_order_id'] as String),
-          child: Padding(
-            padding: const EdgeInsets.all(AppSpacing.s14),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Expanded(child: Text('${f['work_order_id']} · ${f['road_name'] ?? f['road_id']}', style: t.titleMedium)),
-                    const SizedBox(width: AppSpacing.s8),
-                    Text(formatInr(f['cost_inr'] as num? ?? 0), style: t.titleMedium),
-                  ],
-                ),
-                Text('${f['contractor_name']} · Ward ${f['ward_code']}', style: t.bodySmall),
-                const SizedBox(height: AppSpacing.s8),
-                Tag(flagLabel(type), bg: flagColor(type).withValues(alpha: 0.12), fg: flagColor(type)),
-                const SizedBox(height: AppSpacing.s4),
-                Text(flagReason(f), style: t.bodyMedium),
-              ],
-            ),
-          ),
-        ),
+    return ListRow(
+      title: '${f['road_name'] ?? f['road_id']}',
+      caption: '${f['work_order_id']} · ${f['contractor_name']}${showWard ? ' · Ward ${f['ward_code']}' : ''}',
+      chip: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          StatusChip(flagShortLabels[type] ?? type, tone: flagTone(type), more: more),
+          const SizedBox(height: AppSpacing.s4),
+          Text(flagReason(f), style: t.caption.copyWith(color: c.textPrimary), maxLines: 2, overflow: TextOverflow.ellipsis),
+        ],
       ),
+      amount: formatInr(f['cost_inr'] as num? ?? 0),
+      divider: divider,
+      onTap: () => openRoad(f['road_id'] as String, wo: f['work_order_id'] as String),
     );
   }
 }

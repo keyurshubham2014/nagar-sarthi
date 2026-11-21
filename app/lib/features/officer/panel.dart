@@ -4,11 +4,10 @@ import 'package:flutter/material.dart';
 import '../../app_router.dart';
 import '../../core/i18n.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../core/widgets/saarthee.dart';
+import '../../core/widgets/ui.dart';
 
 import '../../core/flag_strings.dart';
 import '../../core/format.dart';
-import '../../core/theme/tokens.dart';
 
 /// One detail page: a title and a body that builds a `ListView(primary: true)` (use [PanelList]).
 /// Pushed full screen above the tabs with [pushPanel].
@@ -54,7 +53,7 @@ class PanelList extends StatelessWidget {
   );
 }
 
-/// Loading, error-with-retry and empty states, shaped as a page body.
+/// Loading (skeleton rows), error-with-retry and empty states, shaped as a page body.
 class PanelMessage extends StatelessWidget {
   const PanelMessage.loading({super.key, this.text = 'Loading…'}) : icon = null, onRetry = null, isError = false;
   const PanelMessage.error(this.text, {super.key, required this.onRetry}) : icon = Icons.error_outline, isError = true;
@@ -66,27 +65,21 @@ class PanelMessage extends StatelessWidget {
   final bool isError;
 
   @override
-  Widget build(BuildContext context) {
-    final c = SaartheeColors.of(context);
-    return PanelList(
-      children: [
-        const SizedBox(height: AppSpacing.s32),
-        Center(
-          child: icon == null
-              ? const SizedBox.square(dimension: 28, child: CircularProgressIndicator(strokeWidth: 2.5))
-              : Icon(icon, size: 40, color: isError ? c.error : c.textSecondary),
+  Widget build(BuildContext context) => ListView(
+    padding: const EdgeInsets.only(top: AppSpacing.s16, bottom: AppSpacing.s32),
+    children: [
+      Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: AppSpacing.maxContent),
+          child: isError
+              ? ErrorState(message: text, onRetry: onRetry!)
+              : icon == null
+              ? Skeleton.rows(count: 6)
+              : EmptyState(message: text),
         ),
-        const SizedBox(height: AppSpacing.s12),
-        Text(text, textAlign: TextAlign.center),
-        if (onRetry != null) ...[
-          const SizedBox(height: AppSpacing.s12),
-          Center(
-            child: FilledButton.icon(onPressed: onRetry, icon: const Icon(Icons.refresh), label: const Text('Retry')),
-          ),
-        ],
-      ],
-    );
-  }
+      ),
+    ],
+  );
 }
 
 /// Renders an [AsyncValue] as a page: loading, error with retry, or [data].
@@ -116,13 +109,13 @@ class Tag extends StatelessWidget {
   final IconData? icon;
   @override
   Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.symmetric(horizontal: AppSpacing.s8, vertical: 2),
-    decoration: BoxDecoration(color: bg, borderRadius: AppRadii.controlRadius),
+    padding: const EdgeInsets.symmetric(horizontal: AppSpacing.s8, vertical: 3),
+    decoration: ShapeDecoration(color: bg, shape: AppRadii.pill),
     child: Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        if (icon != null) ...[Icon(icon, size: 14, color: fg), const SizedBox(width: 4)],
-        Flexible(child: Text(label, style: Theme.of(context).textTheme.labelMedium?.copyWith(color: fg))),
+        if (icon != null) ...[Icon(icon, size: 14, color: fg), const SizedBox(width: AppSpacing.s4)],
+        Flexible(child: Text(label, style: context.type.label.copyWith(fontSize: 12, height: 16 / 12, color: fg))),
       ],
     ),
   );
@@ -138,26 +131,22 @@ class LabelledBar extends StatelessWidget {
   final Color? color;
   @override
   Widget build(BuildContext context) {
-    final t = Theme.of(context).textTheme;
+    final t = context.type;
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: AppSpacing.s4),
+      padding: const EdgeInsets.symmetric(vertical: AppSpacing.s8),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Expanded(child: Text(label, style: t.bodyMedium)),
+              Expanded(child: Text(label, style: t.label)),
               const SizedBox(width: AppSpacing.s8),
-              Text(trailing, style: t.labelLarge),
+              Text(trailing, style: t.label.copyWith(fontWeight: FontWeight.w700, fontFeatures: const [FontFeature.tabularFigures()])),
             ],
           ),
-          const SizedBox(height: 2),
-          LinearProgressIndicator(
-            value: max <= 0 ? 0 : (value / max).clamp(0, 1).toDouble(),
-            minHeight: 6,
-            borderRadius: BorderRadius.circular(3),
-            color: color,
-          ),
+          const SizedBox(height: AppSpacing.s8),
+          ProgressBar(value: max <= 0 ? 0 : (value / max).clamp(0, 1).toDouble(), color: color, height: 8, semanticLabel: label),
         ],
       ),
     );
@@ -176,7 +165,7 @@ class EvidenceTable extends StatelessWidget {
       children: [
         for (final e in evidence.entries)
           Padding(
-            padding: const EdgeInsets.symmetric(vertical: 2),
+            padding: const EdgeInsets.symmetric(vertical: AppSpacing.s4),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -185,7 +174,7 @@ class EvidenceTable extends StatelessWidget {
                       style: t.bodySmall?.copyWith(color: c.textSecondary)),
                 ),
                 const SizedBox(width: AppSpacing.s8),
-                Flexible(child: Text(formatEvidence('${e.key}', e.value), style: t.bodySmall, textAlign: TextAlign.end)),
+                Expanded(child: Text(formatEvidence('${e.key}', e.value), style: t.bodySmall?.copyWith(color: c.textPrimary, fontWeight: FontWeight.w500), textAlign: TextAlign.end)),
               ],
             ),
           ),
@@ -205,4 +194,42 @@ String formatEvidence(String key, dynamic v) {
     if (key == 'ratio' || key == 'threshold') return '$v×';
   }
   return '$v';
+}
+
+/// Tinted panel: a status icon and text (e.g. the warranty note), or a grey
+/// panel without a [tone]. Radius 16, no border.
+class InfoPanel extends StatelessWidget {
+  const InfoPanel({super.key, this.title, this.text, this.child, this.icon, this.tone = StatusTone.neutral});
+  final String? title;
+  final String? text;
+  final Widget? child;
+  final IconData? icon;
+  final StatusTone tone;
+  @override
+  Widget build(BuildContext context) {
+    final c = SaartheeColors.of(context);
+    final t = context.type;
+    final (fg, bg) = StatusChip.colors(c, tone);
+    final neutral = tone == StatusTone.neutral;
+    return Container(
+      padding: const EdgeInsets.all(AppSpacing.s16),
+      decoration: BoxDecoration(color: bg, borderRadius: AppRadii.tileRadius),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (icon != null) ...[Icon(icon, size: AppSpacing.iconSmall + 2, color: neutral ? c.textPrimary : fg), const SizedBox(width: AppSpacing.s12)],
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (title != null) Text(title!, style: t.bodyStrong.copyWith(color: neutral ? c.textPrimary : fg)),
+                if (text != null) Text(text!, style: t.caption.copyWith(fontSize: 14, height: 20 / 14, color: c.textPrimary)),
+                ?child,
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }

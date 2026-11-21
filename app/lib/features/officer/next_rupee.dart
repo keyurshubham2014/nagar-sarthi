@@ -7,7 +7,8 @@ import '../../app_router.dart';
 import '../../core/flag_strings.dart';
 import '../../core/prefs.dart';
 import '../../core/format.dart';
-import '../../core/theme/tokens.dart';
+import '../../core/map/civic_map.dart' show MapColors;
+import '../../core/widgets/ui.dart';
 import '../map/map_data.dart';
 import '../map/map_layers.dart';
 import 'officer_data.dart';
@@ -20,8 +21,8 @@ const Color kSchool = Color(0xFF1565C0);
 const Color kHotspot = Color(0xFF00838F);
 
 const nextRupeeLegend = [
-  LegendEntry('Funded, by rank', kFundedPin),
-  LegendEntry('Beyond the budget', kUnfundedPin),
+  LegendEntry('Funded, by rank', MapColors.pin),
+  LegendEntry('Beyond the budget', MapColors.pin, ring: true),
   LegendEntry('Hospital', kHospital),
   LegendEntry('School', kSchool),
   LegendEntry('Flood hotspot', kHotspot),
@@ -51,7 +52,11 @@ void _openSpot(WidgetRef ref, String ward, List<Json> items) {
   if (items.length == 1) return _openItem(ref, ward, items.single);
   pushPanel(PanelPage(
     '${items.length} items at this spot · Ward $ward',
-    PanelList(children: [for (final i in items) _ItemRow(item: i, funded: i['funded'] == true, onTap: () => _openItem(ref, ward, i))]),
+    ListView(
+      primary: true,
+      padding: const EdgeInsets.symmetric(vertical: AppSpacing.s8),
+      children: [for (final i in items) _ItemRow(item: i, funded: i['funded'] == true, onTap: () => _openItem(ref, ward, i))],
+    ),
   ));
 }
 
@@ -116,19 +121,26 @@ class NextRupeeLayer extends ConsumerWidget {
                 child: Stack(
                   clipBehavior: Clip.none,
                   children: [
-                    Container(
-                      alignment: Alignment.center,
-                      decoration: BoxDecoration(
-                        color: group.any((i) => i['funded'] == true) ? kFundedPin : kUnfundedPin,
-                        shape: BoxShape.circle,
-                        border: Border.all(color: Colors.white, width: 2),
-                        boxShadow: const [BoxShadow(blurRadius: 3, color: Color(0x55000000))],
-                      ),
-                      child: Text(
-                        '${group.first['rank']}',
-                        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 14),
-                      ),
-                    ),
+                    // Map pin: numbered black circle, filled when funded, outlined when beyond the budget.
+                    Builder(builder: (context) {
+                      final funded = group.any((i) => i['funded'] == true);
+                      return Container(
+                        alignment: Alignment.center,
+                        decoration: BoxDecoration(
+                          color: funded ? MapColors.pin : MapColors.label,
+                          shape: BoxShape.circle,
+                          border: Border.all(color: funded ? MapColors.label : MapColors.pin, width: 2),
+                          boxShadow: AppElevation.soft(SaartheeColors.light),
+                        ),
+                        child: Text(
+                          '${group.first['rank']}',
+                          style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                            color: funded ? MapColors.onPin : MapColors.labelText,
+                            height: 1,
+                          ),
+                        ),
+                      );
+                    }),
                     if (group.length > 1)
                       Positioned(
                         right: -6,
@@ -218,13 +230,18 @@ class _PlannerState extends ConsumerState<_Planner> {
     super.dispose();
   }
 
-  void _set(double v) => setState(() => _budget = v < 0 ? 0 : v);
+  void _set(double v) {
+    final next = v < 0 ? 0.0 : v;
+    // Light haptic when the funding line crosses an item.
+    if (fundedFor(widget.items, next).indexOf(false) != fundedFor(widget.items, _budget).indexOf(false)) lightHaptic();
+    setState(() => _budget = next);
+  }
 
   // Quick amounts: percentages of the budget left, or fixed steps when nothing is left.
   List<(String, double)> get _quick {
     final b = widget.base.toDouble();
     if (b <= 0) return [('Current ₹0', 0), ('+₹1 L', 1e5), ('+₹2.5 L', 2.5e5), ('+₹5 L', 5e5)];
-    return [('−25%', b * 0.75), ('Current', b), ('+25%', b * 1.25), ('+50%', b * 1.5)];
+    return [('−25%', b * 0.75), ('Now', b), ('+25%', b * 1.25), ('+50%', b * 1.5)];
   }
 
   String _near(Iterable<Json> xs) {
@@ -253,7 +270,7 @@ class _PlannerState extends ConsumerState<_Planner> {
   @override
   Widget build(BuildContext context) {
     final c = SaartheeColors.of(context);
-    final t = Theme.of(context).textTheme;
+    final t = context.type;
     final items = widget.items;
     final funded = fundedFor(items, _budget);
     final used = [for (final (k, i) in items.indexed) if (funded[k]) _cost(i)].fold<double>(0, (s, v) => s + v);
@@ -262,62 +279,73 @@ class _PlannerState extends ConsumerState<_Planner> {
     final max = (([widget.base * 2, total, 1e5].reduce((a, b) => a > b ? a : b)) / 1e5).ceil() * 1e5;
     final cut = funded.indexOf(false); // first item below the funding line (-1: all funded)
     final changed = (_budget - widget.base).abs() >= 1;
-    Widget row(int k) => _ItemRow(
-      item: items[k],
-      funded: funded[k],
-      onTap: () => _openItem(ref, widget.ward, {...items[k], 'funded': funded[k]}),
-    );
+    final counts = '${funded.where((f) => f).length} of ${items.length} items funded · ${formatInr(used)} used · ${formatInr(_budget - used)} left';
+    final summary = _summary(funded);
 
-    return PanelList(
-      children: [
-        Text('Budget left now: ${formatInr(widget.base)}', style: t.titleMedium),
-        const SizedBox(height: AppSpacing.s8),
-        OutlinedButton.icon(
-          onPressed: () => showNextRupeeOnMap(ref, widget.ward),
-          icon: const Icon(Icons.map_outlined),
-          label: const Text('Show the pins on the map'),
-        ),
-        const SectionTitle('What if the budget changes?'),
-        Container(
-          padding: const EdgeInsets.all(AppSpacing.s16),
-          decoration: AppElevation.cardDecoration(c),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
+    return Scaffold(
+      backgroundColor: c.background,
+      bottomNavigationBar: BottomActionBar(
+        child: PrimaryButton(label: 'Show the pins on the map', icon: Icons.map_outlined, onPressed: () => showNextRupeeOnMap(ref, widget.ward)),
+      ),
+      body: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: AppSpacing.maxContent),
+          child: ListView(
+            primary: true,
+            padding: const EdgeInsets.only(top: AppSpacing.s8, bottom: AppSpacing.s32),
             children: [
-              Row(
-                children: [
-                  Expanded(child: Text(formatInr(_budget), style: t.headlineSmall)),
-                  if (changed)
-                    TextButton.icon(
-                      onPressed: () {
-                        _typed.clear();
-                        _set(widget.base.toDouble());
-                      },
-                      icon: const Icon(Icons.restart_alt),
-                      label: const Text('Reset'),
+              PageTitle(kNextRupeeAction, caption: 'Ranked by need, safety first', detail: true),
+              const SizedBox(height: AppSpacing.s16),
+              Gutter(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(child: Text('Budget to plan with', style: t.label.copyWith(color: c.textSecondary))),
+                        if (changed)
+                          TextButton.icon(
+                            onPressed: () {
+                              _typed.clear();
+                              _set(widget.base.toDouble());
+                            },
+                            icon: const Icon(Icons.restart_alt),
+                            label: const Text('Reset'),
+                          ),
+                      ],
                     ),
-                ],
+                    FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: AlignmentDirectional.centerStart,
+                      child: AnimatedCount(value: _budget, format: formatInr, style: t.figureXL),
+                    ),
+                    Text('Budget left now: ${formatInr(widget.base)}', style: t.caption),
+                  ],
+                ),
               ),
-              Slider(
-                value: _budget.clamp(0, max).toDouble(),
-                max: max.toDouble(),
-                divisions: (max / 5000).round(),
-                label: formatInr(_budget),
-                semanticFormatterCallback: (v) => formatInr(v),
-                onChanged: (v) {
-                  _typed.clear();
-                  _set(v);
-                },
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.s4),
+                child: Slider(
+                  value: _budget.clamp(0, max).toDouble(),
+                  max: max.toDouble(),
+                  divisions: (max / 5000).round(),
+                  label: formatInr(_budget),
+                  semanticFormatterCallback: (v) => formatInr(v),
+                  onChanged: (v) {
+                    // A haptic tick at every lakh.
+                    if ((v / 1e5).floor() != (_budget / 1e5).floor()) lightHaptic();
+                    _typed.clear();
+                    _set(v);
+                  },
+                ),
               ),
-              Wrap(
-                spacing: AppSpacing.s8,
-                runSpacing: AppSpacing.s4,
+              FilterChipRow(
                 children: [
                   for (final (label, v) in _quick)
-                    ChoiceChip(
-                      label: Text(label),
+                    FilterPill(
+                      label: label,
                       selected: (_budget - v).abs() < 1,
-                      onSelected: (_) {
+                      onTap: () {
                         _typed.clear();
                         _set(v);
                       },
@@ -325,56 +353,115 @@ class _PlannerState extends ConsumerState<_Planner> {
                 ],
               ),
               const SizedBox(height: AppSpacing.s12),
-              TextField(
-                controller: _typed,
-                keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                textInputAction: TextInputAction.done,
-                decoration: const InputDecoration(labelText: 'Type an amount', suffixText: 'lakh ₹', hintText: 'e.g. 7.5'),
-                onChanged: (s) {
-                  final v = double.tryParse(s.trim());
-                  if (v != null) _set(v * 1e5);
-                },
+              Gutter(
+                child: TextField(
+                  controller: _typed,
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  textInputAction: TextInputAction.done,
+                  decoration: const InputDecoration(labelText: 'Type an amount', suffixText: 'lakh ₹', hintText: 'e.g. 7.5'),
+                  onChanged: (s) {
+                    final v = double.tryParse(s.trim());
+                    if (v != null) _set(v * 1e5);
+                  },
+                ),
               ),
-              const SizedBox(height: AppSpacing.s12),
-              Text(
-                '${funded.where((f) => f).length} of ${items.length} items funded · ${formatInr(used)} used · ${formatInr(_budget - used)} left',
-                style: t.titleSmall,
+              const SizedBox(height: AppSpacing.s16),
+              Gutter(
+                child: AnimatedSwitcher(
+                  duration: AppMotion.of(context, AppMotion.quick),
+                  layoutBuilder: (cur, prev) => Stack(alignment: AlignmentDirectional.topStart, children: [...prev, ?cur]),
+                  child: Column(
+                    key: ValueKey('$counts|$summary'),
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(counts, style: t.bodyStrong),
+                      const SizedBox(height: AppSpacing.s4),
+                      Text(summary, style: t.caption.copyWith(fontSize: 14, height: 20 / 14, color: changed ? c.textPrimary : c.textSecondary)),
+                    ],
+                  ),
+                ),
               ),
-              const SizedBox(height: AppSpacing.s4),
-              Text(_summary(funded), style: t.bodyMedium?.copyWith(color: changed ? c.primary : c.textSecondary)),
+              const SectionBreak(space: AppSpacing.s32),
+              Gutter(
+                child: Text(
+                  'Ranked by need: severity, nearby hospitals and schools, accidents, flooding and traffic. '
+                  'The ranks never change with the budget; only the funding line moves. Tap an item for its score.',
+                  style: t.caption,
+                ),
+              ),
+              const SizedBox(height: AppSpacing.s8),
+              if (cut == 0)
+                const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: AppSpacing.gutter, vertical: AppSpacing.s8),
+                  child: InfoPanel(
+                    icon: Icons.info_outline,
+                    tone: StatusTone.warning,
+                    text: 'At this budget nothing can be funded yet, except work under warranty.',
+                  ),
+                ),
+              for (var k = 0; k < items.length; k++)
+                Column(
+                  key: ValueKey(items[k]['rank']),
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // The line collapses here and opens at its new place, so it slides between rows.
+                    AnimatedSize(
+                      duration: AppMotion.of(context, AppMotion.standard),
+                      curve: AppMotion.standardCurve,
+                      child: k == cut ? const _FundingLine() : const SizedBox(width: double.infinity),
+                    ),
+                    AnimatedOpacity(
+                      opacity: funded[k] ? 1 : 0.5,
+                      duration: AppMotion.of(context, AppMotion.standard),
+                      child: StaggeredEntrance(
+                        index: k,
+                        child: _ItemRow(
+                          item: items[k],
+                          funded: funded[k],
+                          onTap: () => _openItem(ref, widget.ward, {...items[k], 'funded': funded[k]}),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
             ],
           ),
         ),
-        const SizedBox(height: AppSpacing.s8),
-        Text('Ranked by need: severity, nearby hospitals and schools, accidents, flooding and traffic. '
-            'The ranks never change with the budget; only the funding line moves. Tap an item for its score.',
-            style: t.bodySmall?.copyWith(color: c.textSecondary)),
-        const SizedBox(height: AppSpacing.s8),
-        if (cut == 0)
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: AppSpacing.s8),
-            child: Text('At this budget nothing can be funded yet, except work under warranty.', style: t.bodyMedium?.copyWith(color: c.warning)),
-          ),
-        for (var k = 0; k < items.length; k++) ...[
-          if (k == cut)
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: AppSpacing.s8),
-              child: Row(
-                children: [
-                  Expanded(child: Divider(color: c.error, thickness: 1.5)),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: AppSpacing.s8),
-                    child: Text(kBudgetEnds, style: t.labelLarge?.copyWith(color: c.error)),
-                  ),
-                  Expanded(child: Divider(color: c.error, thickness: 1.5)),
-                ],
-              ),
-            ),
-          row(k),
-        ],
-      ],
+      ),
     );
   }
+}
+
+class _FundingLine extends StatelessWidget {
+  const _FundingLine();
+  @override
+  Widget build(BuildContext context) {
+    final c = SaartheeColors.of(context);
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.gutter, vertical: AppSpacing.s8),
+      child: Row(
+        children: [
+          Expanded(child: Divider(color: c.error, thickness: 2)),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.s8),
+            child: Text(kBudgetEnds, style: context.type.label.copyWith(color: c.error, fontWeight: FontWeight.w700)),
+          ),
+          Expanded(child: Divider(color: c.error, thickness: 2)),
+        ],
+      ),
+    );
+  }
+}
+
+/// Factor chips from the item's reasons.
+List<(String, IconData)> _factors(Json i) {
+  final rs = [for (final r in (i['reasons'] as List? ?? const [])) '$r'];
+  return [
+    if (rs.any((r) => r.startsWith('Near hospital'))) ('Hospital', PictogramKind.hospital.icon),
+    if (rs.any((r) => r.startsWith('Near school'))) ('School', PictogramKind.school.icon),
+    if (rs.any((r) => r.startsWith('Flood hotspot'))) ('Flood spot', PictogramKind.flood.icon),
+    if (((i['parts'] as Map?)?['traffic'] as num? ?? 0) >= 7) ('Heavy traffic', PictogramKind.traffic.icon),
+  ];
 }
 
 class _ItemRow extends StatelessWidget {
@@ -386,32 +473,44 @@ class _ItemRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final c = SaartheeColors.of(context);
     final issue = item['issue'] as Map;
-    return ListTile(
-      contentPadding: EdgeInsets.zero,
-      onTap: onTap,
-      leading: CircleAvatar(
-        radius: 16,
-        backgroundColor: funded ? kFundedPin : kUnfundedPin,
-        child: Text('${item['rank']}', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800)),
+    final factors = _factors(item);
+    final warranty = item['claim_under_dlp'] == true;
+    return Semantics(
+      label: funded ? 'Funded' : 'Beyond the budget',
+      child: ListRow(
+        leading: Container(
+          width: 40,
+          height: 40,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(color: c.primary, shape: BoxShape.circle),
+          child: Text('${item['rank']}', style: context.type.label.copyWith(color: c.onPrimary, fontWeight: FontWeight.w700)),
+        ),
+        title: '${issue['category']} · ${issue['locality']}',
+        caption: 'Score ${item['score']}',
+        chip: factors.isEmpty && !warranty
+            ? null
+            : Wrap(
+                spacing: AppSpacing.s4,
+                runSpacing: AppSpacing.s4,
+                children: [
+                  if (warranty) Tag(kWarrantyClaimTag, bg: c.infoTint, fg: c.info, icon: Icons.verified_user_outlined),
+                  for (final (label, icon) in factors) Tag(label, bg: c.surfaceAlt, fg: c.textPrimary, icon: icon),
+                ],
+              ),
+        amount: formatInr(item['cost_to_ward_inr'] as num? ?? 0),
+        onTap: onTap,
       ),
-      title: Text('${issue['category']} · ${issue['locality']}'),
-      subtitle: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text('Score ${item['score']} · ${formatInr(item['cost_to_ward_inr'] as num? ?? 0)} to ward'),
-          if (item['claim_under_dlp'] == true)
-            Padding(
-              padding: const EdgeInsets.only(top: 2),
-              child: Tag(kWarrantyClaimTag, bg: c.infoTint, fg: c.info, icon: Icons.verified_user_outlined),
-            ),
-        ],
-      ),
-      trailing: const Icon(Icons.chevron_right),
     );
   }
 }
 
-/// Why this item ranks where it does: the five score parts against their weights.
+String _score(num v) {
+  final r = (v * 100).round() / 100;
+  return r == r.roundToDouble() ? '${r.round()}' : '$r';
+}
+
+/// Why this item ranks where it does: the five score parts against their weights,
+/// the recommended repair, and the warranty note where it applies.
 class NextRupeeDetail extends ConsumerWidget {
   const NextRupeeDetail(this.item, {super.key});
   final Json item;
@@ -419,55 +518,74 @@ class NextRupeeDetail extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final c = SaartheeColors.of(context);
-    final t = Theme.of(context).textTheme;
+    final t = context.type;
     final weights = (ref.watch(mapDataProvider).value?.meta['weights'] as Map?) ??
         const {'severity': 30, 'access': 30, 'accidents': 20, 'flood': 10, 'traffic': 10};
     final parts = item['parts'] as Map? ?? const {};
     final issue = item['issue'] as Map;
+    final funded = item['funded'] == true;
     return PanelList(
       children: [
-        Wrap(
-          spacing: AppSpacing.s8,
-          runSpacing: AppSpacing.s4,
-          children: [
-            Tag(item['funded'] == true ? 'Within budget' : 'Beyond the budget',
-                bg: item['funded'] == true ? c.successTint : c.surfaceAlt,
-                fg: item['funded'] == true ? c.success : c.textSecondary),
-            if (item['claim_under_dlp'] == true)
-              Tag(kWarrantyClaimTag, bg: c.infoTint, fg: c.info, icon: Icons.verified_user_outlined),
-          ],
+        Align(
+          alignment: AlignmentDirectional.centerStart,
+          child: StatusChip(funded ? 'Within budget' : 'Beyond the budget', tone: funded ? StatusTone.success : StatusTone.neutral, dot: true),
         ),
-        const SizedBox(height: AppSpacing.s8),
-        Text('Score ${item['score']} of 100', style: t.headlineSmall),
-        Text('Complaints: ${(issue['complaint_ids'] as List? ?? const []).join(', ')} · ${issue['upvotes'] ?? 0} upvotes',
-            style: t.bodySmall?.copyWith(color: c.textSecondary)),
+        const SizedBox(height: AppSpacing.s16),
+        HeroFigure(
+          caption: 'Need score',
+          value: item['score'] as num? ?? 0,
+          format: (v) => '${_score(v)} of 100',
+          explanation: 'Complaints: ${(issue['complaint_ids'] as List? ?? const []).join(', ')} · ${issue['upvotes'] ?? 0} upvotes',
+        ),
         const SectionTitle('Score breakdown'),
-        for (final e in scorePartLabels.entries)
-          LabelledBar(
-            label: e.value,
-            value: parts[e.key] as num? ?? 0,
-            max: weights[e.key] as num? ?? 0,
-            trailing: '${parts[e.key] ?? 0} / ${weights[e.key] ?? 0}',
+        for (final (i, e) in scorePartLabels.entries.indexed)
+          StaggeredEntrance(
+            index: i,
+            child: LabelledBar(
+              label: '${e.value} · weight ${weights[e.key] ?? 0}',
+              value: parts[e.key] as num? ?? 0,
+              max: weights[e.key] as num? ?? 0,
+              trailing: '${_score(parts[e.key] as num? ?? 0)} / ${weights[e.key] ?? 0}',
+            ),
           ),
+        const SizedBox(height: AppSpacing.s24),
+        InfoPanel(
+          icon: Icons.handyman_outlined,
+          title: 'Recommended repair',
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const SizedBox(height: AppSpacing.s4),
+              Text('${item['recommended_method']}', style: t.body),
+              Text('Re-opens ${formatPercent(item['method_reopen_rate'] as num? ?? 0)} of the time in this season’s data',
+                  style: t.caption.copyWith(fontSize: 14, height: 20 / 14)),
+              const SizedBox(height: AppSpacing.s8),
+              EvidenceTable({
+                'Estimated cost': formatInr(item['est_cost_inr'] as num? ?? 0),
+                'Cost to ward': formatInr(item['cost_to_ward_inr'] as num? ?? 0),
+              }),
+            ],
+          ),
+        ),
+        if (item['claim_under_dlp'] == true) ...[
+          const SizedBox(height: AppSpacing.s12),
+          const InfoPanel(icon: Icons.verified_user_outlined, tone: StatusTone.info, title: kUnderWarranty, text: kWarrantyClaimTag),
+        ],
         const SectionTitle('Reasons'),
         for (final r in (item['reasons'] as List? ?? const []))
           Padding(
-            padding: const EdgeInsets.only(bottom: AppSpacing.s4),
+            padding: const EdgeInsets.only(bottom: AppSpacing.s8),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text('•  '),
-                Expanded(child: Text('$r')),
+                Padding(
+                  padding: const EdgeInsets.only(top: AppSpacing.s8, right: AppSpacing.s12),
+                  child: Container(width: 6, height: 6, decoration: BoxDecoration(color: c.textPrimary, shape: BoxShape.circle)),
+                ),
+                Expanded(child: Text('$r', style: t.body)),
               ],
             ),
           ),
-        const SectionTitle('Recommended repair'),
-        Text('${item['recommended_method']}', style: t.titleSmall),
-        Text('Re-opens ${formatPercent(item['method_reopen_rate'] as num? ?? 0)} of the time in this season’s data',
-            style: t.bodySmall),
-        const SizedBox(height: AppSpacing.s8),
-        Text('Estimated cost ${formatInr(item['est_cost_inr'] as num? ?? 0)}', style: t.bodyMedium),
-        Text('Cost to ward ${formatInr(item['cost_to_ward_inr'] as num? ?? 0)}', style: t.bodyMedium),
       ],
     );
   }
