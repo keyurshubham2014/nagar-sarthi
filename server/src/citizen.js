@@ -32,45 +32,128 @@ export const localityByName = (name) => (typeof name === 'string' ? byName.get(n
 
 const isLatin = (s) => /^[\x20-\x7e]+$/.test(s);
 const esc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-// Every name and alias, longest first, so "Worli Naka" wins over "Worli" and "Saki Naka Junction" over "Saki Naka".
-const localityKeys = localities
-  .flatMap((l) => [l.locality, ...l.aliases].map((k) => ({ k, l })))
-  .sort((a, b) => b.k.length - a.k.length)
-  .map(({ k, l }) => ({
-    l,
-    test: isLatin(k)
-      ? // "Charkop Road ..., Poisar": a name followed by road/marg is a street, not the place.
-        ((re) => (t) => re.test(t))(new RegExp(`(?<![a-z0-9])${esc(k.toLowerCase())}(?![a-z0-9])(?!\\s+(?:road|rd|marg|subway|bridge)\\b)`))
-      : (t) => t.includes(k),
-  }));
 
-/** Longest locality name or alias found in [text], case-insensitive; null when none. */
-export function resolveLocality(text) {
+// "Dadar East" / "Dadar West" share the base "dadar". A bare base (Latin name, or a Devanagari alias
+// without पूर्व/पश्चिम) is resolved by the direction word after it, or flagged ambiguous.
+const DIR_IN_KEY = /(?:^|[\s(])(?:east|west|e|w)\)?$|पूर्व|पश्चिम/i;
+const sides = new Map(); // base -> {east?, west?}
+for (const l of localities) {
+  const m = /^(.*) (East|West)$/.exec(l.locality);
+  if (m) sides.set(m[1].toLowerCase(), { ...sides.get(m[1].toLowerCase()), [m[2].toLowerCase()]: l });
+}
+const keys = [];
+for (const l of localities) {
+  const base = /^(.*) (?:East|West)$/.exec(l.locality)?.[1].toLowerCase();
+  for (const k of [l.locality, ...l.aliases]) {
+    const bare = base && !DIR_IN_KEY.test(k) && !isLatin(k); // e.g. दादर on Dadar West
+    keys.push(bare ? { k, base } : { k, l });
+  }
+}
+// The Latin base itself ("dadar", "kurla"), unless it is a locality of its own (Nahur / Nahur West).
+for (const base of sides.keys()) if (!byName.has(base)) keys.push({ k: base, base });
+const KEYS = keys.map((e) => ({
+  ...e,
+  re: isLatin(e.k) ? new RegExp(`(?<![a-z0-9])${esc(e.k.toLowerCase())}(?![a-z0-9])`, 'g') : null,
+}));
+
+const DIR_AFTER = /^\s*(?:\(\s*)?(east|west|e|w|पूर्व|पश्चिम)(?:\s*\))?(?![a-zऀ-ॿ])/;
+// A name followed within two words by a road word is part of a street name ("Sion Trombay Road").
+// "Kurla West station road" and "Parel mein flyover" name the place, so those in-between words don't count.
+const STREET_AFTER =
+  /^\s+(?:(?!(?:station|mein|me|pe|par|ke|ki|ka|near|at|in|on|the|se)\s)[\p{L}\p{M}]+\s+){0,2}(?:road|rd|marg|link road|highway|flyover|subway|bridge)(?![a-z])/u;
+const STREET_NAME = /\b(?:road|marg)$/i; // localities named after a street (Linking Road, Marve Road)
+const CUE_BEFORE = /(?:,|\b(?:at|near|in|mein))\s*$/;
+const CUE_AFTER = /^\s*(?:मध्ये|में|mein|[.!।]|$)/;
+
+function* occurrences(t, e) {
+  if (e.re) {
+    e.re.lastIndex = 0;
+    for (let m; (m = e.re.exec(t)); ) yield [m.index, m.index + m[0].length];
+  } else {
+    for (let i = t.indexOf(e.k); i >= 0; i = t.indexOf(e.k, i + 1)) yield [i, i + e.k.length];
+  }
+}
+
+/**
+ * Locality named in [text]: {l, ambiguous, candidates}, or null. Every name and alias is found;
+ * one that is part of a street name ranks below one mentioned on its own (and alone gives null),
+ * then a name with a known side beats a bare "Kurla", then a name after
+ * "at / near / in" or a comma wins, then the longest, then the last.
+ */
+export function resolvePlace(text) {
   if (typeof text !== 'string' || !text) return null;
   // "Shiv" is an alias of Sion, but "Shiv Sena shakha" is a common landmark everywhere.
-  const t = text.toLowerCase().replace(/shiv\s*sena/g, ' ');
-  return localityKeys.find((e) => e.test(t))?.l ?? null;
+  const t = text.toLowerCase().replace(/shiv\s*sena/g, '         ');
+  const found = [];
+  for (const e of KEYS) {
+    for (let [start, end] of occurrences(t, e)) {
+      let l = e.l;
+      let candidates = null;
+      if (e.base) {
+        const s = sides.get(e.base);
+        const d = DIR_AFTER.exec(t.slice(end));
+        const side = d && (/^(east|e|पूर्व)$/.test(d[1]) ? 'east' : 'west');
+        if (d) end += d[0].length;
+        l = side ? s[side] : null;
+        if (!l) {
+          const both = [s.east, s.west].filter(Boolean);
+          l = both[0]; // stable: East before West; the citizen picks on the card
+          if (both.length > 1) candidates = both.map((x) => x.locality);
+        }
+        if (!l) continue;
+      }
+      const before = t.slice(0, start);
+      const after = t.slice(end);
+      const street = STREET_AFTER.test(after) || /\bon\s*$/.test(before);
+      const streetName = STREET_NAME.test(l.locality); // "Linking Road Bandra West": Bandra West wins
+      found.push({ l, candidates, start, end, street, streetName, cue: CUE_BEFORE.test(before) || CUE_AFTER.test(after) });
+    }
+  }
+  // Drop a match inside a longer one ("Parel" inside "Lower Parel").
+  const kept = found.filter(
+    (c) => !found.some((d) => d.start <= c.start && d.end >= c.end && d.end - d.start > c.end - c.start),
+  );
+  // Only street names ("MG Road Ghatkopar"): no guess; the card asks the citizen to pick.
+  if (!kept.some((c) => !c.street)) return null;
+  const rank = (c) => [c.street ? 0 : 1, c.streetName ? 0 : 1, c.candidates ? 0 : 1, c.cue ? 1 : 0, c.end - c.start, c.start];
+  kept.sort((a, b) => {
+    const [x, y] = [rank(a), rank(b)];
+    for (let i = 0; i < x.length; i++) if (x[i] !== y[i]) return y[i] - x[i];
+    return 0;
+  });
+  const best = kept[0];
+  return { l: best.l, ambiguous: !!best.candidates, candidates: best.candidates ?? [best.l.locality] };
 }
 
 // ------------------------------------------------------- device-rule intake
 
-// Ordered: the first category with a keyword hit wins. Built from the phrasing in data/complaints.csv
-// (English, Hinglish, Hindi, Marathi). Manhole comes before drain ("gutter ka dhakkan", "गटाराचे झाकण").
+// Ordered: the first specific category with a keyword hit wins; "Road related" only when none hits.
+// Built from the phrasing in data/complaints.csv (English, Hinglish, Hindi, Marathi).
+// Manhole comes before drain ("gutter ka dhakkan", "गटाराचे झाकण"). Text is normalised first (normalise()).
 const RULES = [
-  ['Open or broken manhole', ['manhole', 'man hole', 'chamber', 'dhakkan', 'dhakan', 'ढक्कन', 'झाकण', 'मॅनहोल', 'मैनहोल', 'मेनहोल']],
-  ['Road cave-in', ['cave-in', 'cave in', 'caved', 'caving', 'road sank', 'sunk', 'sinkhole', 'dhas gay', 'dhans', 'dhasa', 'धँस', 'धंस', 'धस गई', 'खचला', 'खचले', 'खचली', 'खचलेला']],
+  ['Open or broken manhole', ['manhole', 'chamber', 'dhakkan', 'dhakan', 'ढक्कन', 'झाकण', 'मॅनहोल', 'मैनहोल', 'मेनहोल']],
+  ['Road cave-in', ['cave-in', 'caved', 'caving', 'road sank', 'sunk', 'sinkhole', 'dhas gay', 'dhans', 'dhasa', 'धँस', 'धंस', 'धस गई', 'खचला', 'खचले', 'खचली', 'खचलेला']],
   ['Broken paver blocks', ['paver', 'paving block', 'blocks uprooted', 'पेवर', 'पेव्हर']],
   ['Choked drain / nullah overflow', ['nullah', 'nalla', 'nala', 'naala', 'drain', 'gutter', 'culvert', 'sewage', 'गटार', 'नाला', 'नाले', 'नाली', 'गटर', 'ड्रेनेज']],
-  ['Pothole', ['pothole', 'pot hole', 'khadda', 'khadde', 'gaddha', 'gadda', 'gadhha', 'crater', 'big hole', 'खड्डा', 'खड्डे', 'गड्ढा', 'गड्ढे', 'गड्डा']],
-  ['Waterlogging', ['waterlog', 'water level', 'water logging', 'water-logging', 'flood', 'paani bhar', 'pani bhar', 'paani jama', 'pani jama', 'itna paani', 'ghutne tak', 'पाणी साच', 'पाणी तुंब', 'पानी भर', 'पानी जमा', 'जलभराव', 'तुंबल']],
+  ['Pothole', ['pothole', 'khadda', 'khadde', 'gaddha', 'gadda', 'gadhha', 'crater', 'big hole', 'खड्डा', 'खड्डे', 'गड्ढा', 'गड्ढे', 'गड्डा']],
+  ['Waterlogging', ['waterlog', 'water level', 'flood', 'paani bhar', 'pani bhar', 'paani jama', 'pani jama', 'itna paani', 'ghutne tak', 'knee deep', 'पाणी साच', 'पाणी तुंब', 'पानी भर', 'पानी जमा', 'जलभराव', 'तुंबल']],
   ['Road related', ['footpath', 'road', 'street', 'hawker', 'sadak', 'rasta', 'रस्ता', 'रस्त्या', 'सड़क']],
 ];
 const matcher = (k) =>
   isLatin(k) ? ((re) => (t) => re.test(t))(new RegExp(`(?<![a-z])${esc(k)}`)) : (t) => t.includes(k);
 const RULE_TESTS = RULES.map(([cat, words]) => [cat, words.map(matcher)]);
 
+// Lowercase and join the compounds people split: water logged / water-logged, pot hole / pot-hole, man-hole, cave in.
+const normalise = (text) =>
+  text
+    .toLowerCase()
+    .replace(/water[\s-]*log/g, 'waterlog')
+    .replace(/pot[\s-]*hole/g, 'pothole')
+    .replace(/man[\s-]*hole/g, 'manhole')
+    .replace(/cave[\s-]*in(?![a-z])/g, 'cave-in');
+
 export function classify(text) {
-  const t = text.toLowerCase();
+  const t = normalise(text);
   return RULE_TESTS.find(([, tests]) => tests.some((f) => f(t)))?.[0] ?? 'Other';
 }
 
@@ -161,7 +244,10 @@ const fieldError = (fields) => new ApiError(400, 'validation_failed', 'Please co
 export const intake = {
   prepare(body) {
     const text = typeof body.text === 'string' ? body.text.trim() : '';
-    if (text.length < 5 || text.length > 1000) throw fieldError({ text: 'Describe the problem in 5 to 1000 characters' });
+    // Same minimum as filing, so a card is never shown for a complaint that cannot be filed.
+    if (text.length < 10 || text.length > 1000) {
+      throw fieldError({ text: 'Please describe the problem in a little more detail (10 to 1000 characters)' });
+    }
     const rules = { category: classify(text), place_text: null, language: detectLanguage(text) };
     return { text, vars: { json: JSON.stringify(rules) } };
   },
@@ -192,7 +278,8 @@ ${text.replace(/[<>]/g, ' ')}
 /** Turns the relay reply into the intake result: resolved place, ward and matches. */
 export async function understand(audit, body, reply) {
   const j = parseJson(reply.text) ?? {};
-  const loc = resolveLocality(typeof j.place_text === 'string' ? j.place_text : '') ?? resolveLocality(body.text);
+  const place = resolvePlace(typeof j.place_text === 'string' ? j.place_text : '') ?? resolvePlace(body.text);
+  const loc = place?.l;
   const base = {
     source: reply.source,
     category: j.category,
@@ -201,6 +288,9 @@ export async function understand(audit, body, reply) {
     locality: loc?.locality ?? null,
     ward_code: loc?.ward_code ?? null,
     ward_name: loc ? audit.wards[loc.ward_code]?.name ?? null : null,
+    // "Kurla" with no East/West: the first side is shown and the citizen picks on the card.
+    ambiguous: place?.ambiguous ?? false,
+    locality_candidates: place?.candidates ?? [],
   };
   if (!loc) return { ...base, match_count: 0, matches: [] };
   return { ...base, ...(await findMatches(audit, j.category, loc.locality)) };

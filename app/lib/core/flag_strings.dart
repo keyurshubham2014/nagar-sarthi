@@ -162,6 +162,19 @@ const String kUnderstoodRules = 'Understood on device rules (keyword match, no A
 const String kAddMyVoice = 'Add my voice';
 const String kFileAsNew = 'File as new';
 const String kNotYetFixed = 'Not yet fixed — no work order linked';
+
+/// What happened to a complaint that has no work order, by its status. The one mapping used by
+/// match cards, the locality list and the detail page; translated through core/i18n.dart `tr`.
+String noWorkOrderOutcome(Object? status) => switch (status) {
+  'Open' || 'In Progress' || 'open' => kNotYetFixed,
+  'Forwarded to MMRDA/PWD' => 'Forwarded to another agency (MMRDA/PWD)',
+  'Forwarded to SWM dept' => 'Forwarded to another department (solid waste)',
+  'Rejected - Not BMC road' => 'Closed: not a BMC road',
+  'Rejected - Not road issue' => 'Closed: not a road issue',
+  'Closed - Duplicate' => 'Closed as duplicate',
+  'Resolved' => 'Resolved, no work order linked',
+  _ => 'No work order linked',
+};
 const String kFixFailed30 = 'Repair failed within 30 days';
 const String kFixHeld = 'Held: not re-opened within 30 days';
 /// A template: fill {n} (see core/i18n.dart `tr`).

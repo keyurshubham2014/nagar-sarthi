@@ -176,6 +176,8 @@ class _IntakePageState extends ConsumerState<IntakePage> {
             floatingLabelBehavior: FloatingLabelBehavior.always,
             border: const OutlineInputBorder(),
             errorText: _fields['description'],
+            // Intake and filing both need 10 characters (server checks too).
+            helperText: _text.text.trim().isNotEmpty && _text.text.trim().length < 10 ? context.tr('At least 10 characters, please.') : null,
           ),
         ),
         Text(context.tr('Try an example'), style: t.labelMedium),
@@ -200,7 +202,7 @@ class _IntakePageState extends ConsumerState<IntakePage> {
         ),
         const SizedBox(height: AppSpacing.s12),
         FilledButton.icon(
-          onPressed: _busy || _text.text.trim().length < 5 ? null : _understand,
+          onPressed: _busy || _text.text.trim().length < 10 ? null : _understand,
           icon: _busy && r == null
               ? const SizedBox.square(dimension: 18, child: CircularProgressIndicator(strokeWidth: 2))
               : const Icon(Icons.auto_awesome),
@@ -264,6 +266,15 @@ class _IntakePageState extends ConsumerState<IntakePage> {
         },
       ),
       const SizedBox(height: AppSpacing.s12),
+      if (r['ambiguous'] == true && (r['locality_candidates'] as List).length > 1 && _locality == r['locality'])
+        Padding(
+          padding: const EdgeInsets.only(bottom: AppSpacing.s4),
+          child: Text(
+            context.tr('Is it {a} or {b}? {a} is selected; change it below if needed.',
+                {'a': (r['locality_candidates'] as List)[0], 'b': (r['locality_candidates'] as List)[1]}),
+            style: t.bodyMedium?.copyWith(color: c.warning),
+          ),
+        ),
       if (_locality == null)
         Padding(
           padding: const EdgeInsets.only(bottom: AppSpacing.s4),
@@ -359,7 +370,7 @@ class _MatchCard extends StatelessWidget {
     final c = SaartheeColors.of(context);
     final wo = m['work_order_id'];
     final outcome = wo == null
-        ? context.tr(m['source'] == 'app' ? 'Filed in this app' : kNotYetFixed)
+        ? context.tr(m['source'] == 'app' ? 'Filed in this app' : noWorkOrderOutcome(m['status']))
         : '${_plain(m['contractor_name'])} · ${formatInr(m['cost_inr'] as num? ?? 0)} · '
               '${context.tr(m['sla_met'] == true ? 'on time' : 'late')} · ${context.tr(m['reopened'] == true ? kFixFailed30.toLowerCase() : 'held')}';
     return Card(
@@ -489,7 +500,7 @@ class ComplaintDetail extends ConsumerWidget {
     final t = Theme.of(context).textTheme;
     final c = SaartheeColors.of(context);
     final wo = d['work_order'] as Map?;
-    final open = const {'Open', 'In Progress', 'open'}.contains(d['status']);
+    final open = noWorkOrderOutcome(d['status']) == kNotYetFixed;
     final matched = d['matched_complaint_id'] as String?;
     return PanelList(
       children: [
@@ -512,8 +523,8 @@ class ComplaintDetail extends ConsumerWidget {
           _Step(
             icon: Icons.hourglass_empty,
             color: c.warning,
-            title: context.tr(open ? kNotYetFixed : 'No work order linked'),
-            sub: open ? context.tr('No repair has been ordered for this complaint yet.') : context.tr('Closed as: {s}', {'s': d['status']}),
+            title: context.tr(noWorkOrderOutcome(d['status'])),
+            sub: context.tr(open ? 'No repair has been ordered for this complaint yet.' : 'No work order linked'),
             last: true,
           ),
         ] else ...[
