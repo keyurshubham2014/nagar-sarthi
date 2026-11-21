@@ -15,28 +15,34 @@ const L = {
     left: (s, d) => `Spending was ${s}, leaving ${d}.`,
     jobs: (n) => `${n} jobs`,
     types: {
-      dlp_paid: 'Billed while the road was under warranty, to be claimed and verified',
+      dlp_paid: 'Billed while under warranty (to be claimed and verified)',
       over_rate: 'Billed above the standard rate',
       double_billing: 'Repeat jobs with no complaint linked',
     },
     none: 'None',
-    warranty: 'under warranty, claim from contractor',
+    warranty: 'under warranty: claim from contractor',
     categories: {},
-    reasons: [[/^Severity (\d) of 5 for .*$/, 'severity $1 of 5']],
+    reasons: [
+      [/^Severity (\d) of 5 for .*$/, 'severity $1 of 5'],
+      [/^Near (?:hospital|school): (.*)$/, 'near $1'],
+      [/^(\d+) recorded accidents on this road$/, (_, n) => (n === '1' ? '1 recorded accident on this road' : `${n} recorded accidents on this road`)],
+      [/^Flood hotspot: (.*)$/, 'flooding near $1'],
+      [/^Congestion index ([\d.]+) of 10$/, 'traffic congestion $1 of 10'],
+    ],
   },
   hi: {
     lakh: 'लाख',
     crore: 'करोड़',
-    over: (s, d) => `खर्च ${s} हुआ, जो बजट से ${d} ज़्यादा है।`,
-    left: (s, d) => `खर्च ${s} हुआ, और ${d} बचे हैं।`,
+    over: (s, d) => `खर्च ${s} हुआ, यानी बजट से ${d} ज़्यादा।`,
+    left: (s, d) => `खर्च ${s} हुआ, और ${d} बचा है।`,
     jobs: (n) => `${n} काम`,
     types: {
-      dlp_paid: 'वारंटी वाली सड़कों पर भुगतान, जिसका दावा और सत्यापन किया जाना है',
+      dlp_paid: 'वारंटी वाली सड़कों पर भुगतान (दावा और सत्यापन बाकी)',
       over_rate: 'मानक दर से ज़्यादा बिल',
-      double_billing: 'बिना शिकायत के दोबारा किया गया काम',
+      double_billing: 'बिना शिकायत दोहराया गया काम',
     },
     none: 'कोई नहीं',
-    warranty: 'वारंटी में, खर्च ठेकेदार से',
+    warranty: 'वारंटी: ठेकेदार से दावा बाकी',
     categories: {
       'Road cave-in': 'सड़क धँसना',
       Waterlogging: 'जलभराव',
@@ -49,10 +55,9 @@ const L = {
     },
     reasons: [
       [/^Severity (\d) of 5 for .*$/, 'गंभीरता 5 में से $1'],
-      [/^Near hospital: (.*)$/, 'अस्पताल के पास: $1'],
-      [/^Near school: (.*)$/, 'स्कूल के पास: $1'],
-      [/^(\d+) recorded accidents on this road$/, 'इस सड़क पर $1 दर्ज दुर्घटनाएँ'],
-      [/^Flood hotspot: (.*)$/, 'जलभराव वाला स्थान: $1'],
+      [/^Near (?:hospital|school): (.*)$/, '$1 के पास'],
+      [/^(\d+) recorded accidents on this road$/, (_, n) => (n === '1' ? 'इस सड़क पर 1 दुर्घटना दर्ज' : `इस सड़क पर ${n} दुर्घटनाएँ दर्ज`)],
+      [/^Flood hotspot: (.*)$/, '$1 के पास जलभराव होता है'],
       [/^Congestion index ([\d.]+) of 10$/, 'ट्रैफ़िक भीड़ 10 में से $1'],
       [/^Road under warranty:.*$/, 'सड़क वारंटी में है'],
     ],
@@ -61,15 +66,15 @@ const L = {
     lakh: 'लाख',
     crore: 'कोटी',
     over: (s, d) => `खर्च ${s} झाला, जो अर्थसंकल्पापेक्षा ${d} जास्त आहे.`,
-    left: (s, d) => `खर्च ${s} झाला, आणि ${d} शिल्लक आहेत.`,
+    left: (s, d) => `खर्च ${s} झाला, आणि ${d} शिल्लक आहे.`,
     jobs: (n) => `${n} कामे`,
     types: {
-      dlp_paid: 'वॉरंटी असलेल्या रस्त्यांवर दिलेली रक्कम, जिचा दावा करून पडताळणी करायची आहे',
+      dlp_paid: 'वॉरंटी असलेल्या रस्त्यांवर दिलेली रक्कम (दावा व पडताळणी बाकी)',
       over_rate: 'मानक दरापेक्षा जास्त बिल',
       double_billing: 'तक्रार नसताना पुन्हा केलेले काम',
     },
     none: 'एकही नाही',
-    warranty: 'वॉरंटीत, खर्च कंत्राटदाराकडून',
+    warranty: 'वॉरंटीत: कंत्राटदाराकडून दावा बाकी',
     categories: {
       'Road cave-in': 'रस्ता खचणे',
       Waterlogging: 'पाणी साचणे',
@@ -82,10 +87,9 @@ const L = {
     },
     reasons: [
       [/^Severity (\d) of 5 for .*$/, 'तीव्रता 5 पैकी $1'],
-      [/^Near hospital: (.*)$/, 'रुग्णालयाजवळ: $1'],
-      [/^Near school: (.*)$/, 'शाळेजवळ: $1'],
-      [/^(\d+) recorded accidents on this road$/, 'या रस्त्यावर $1 नोंदवलेले अपघात'],
-      [/^Flood hotspot: (.*)$/, 'पाणी साचणारे ठिकाण: $1'],
+      [/^Near (?:hospital|school): (.*)$/, '$1 जवळ'],
+      [/^(\d+) recorded accidents on this road$/, (_, n) => (n === '1' ? 'या रस्त्यावर 1 अपघात नोंदवलेला' : `या रस्त्यावर ${n} अपघात नोंदवलेले`)],
+      [/^Flood hotspot: (.*)$/, '$1 जवळ पाणी साचते'],
       [/^Congestion index ([\d.]+) of 10$/, 'वाहतूक कोंडी 10 पैकी $1'],
       [/^Road under warranty:.*$/, 'रस्ता वॉरंटीत आहे'],
     ],
@@ -100,7 +104,7 @@ function money(n, t) {
   return `₹${Math.round(a).toLocaleString('en-IN')}`;
 }
 const pct = (share) => `${Math.round(share * 100)}%`;
-// The closing line says contractors are fictional; dropping the tag keeps the brief short.
+// The closing line says contractors and schools are fictional; dropping the tag keeps the brief short.
 const plain = (name) => name.replace(/ \(synthetic\)/g, '');
 
 function reason(r, t) {
@@ -139,8 +143,8 @@ function figures(code, audit, lang) {
           .map((it, i) => {
             const cat = t.categories[it.issue.category] ?? it.issue.category;
             // Category already says what is wrong; give the first reason beyond severity.
-            const why = reason(it.reasons.find((r) => !r.startsWith('Severity')) ?? it.reasons[0] ?? '', t);
-            const dlp = it.claim_under_dlp ? `, ${t.warranty}` : '';
+            const why = plain(reason(it.reasons.find((r) => !r.startsWith('Severity')) ?? it.reasons[0] ?? '', t));
+            const dlp = it.claim_under_dlp ? ` (${t.warranty})` : '';
             return `${i + 1}. ${cat}, ${it.issue.locality}, ${money(it.est_cost_inr, t)}${dlp}: ${why}`;
           })
           .join('\n')
@@ -181,8 +185,10 @@ Rules:
 - No accusations. Say "needs review" and "to be claimed and verified".
 - End with one line saying the data is synthetic, not BMC data.
 Return only the brief.`,
-      maxTokens: 900,
+      maxTokens: 1500, // Devanagari costs several tokens per word
     };
   },
+  // A live brief over 220 words goes back to the saved one (max_tokens cut-offs are caught by the relay).
+  validate: (text) => text.trim().split(/\s+/).length <= 220,
   fallbackKey: (body) => (typeof body.language === 'string' ? body.language : 'en'),
 };

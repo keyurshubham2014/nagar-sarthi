@@ -89,7 +89,7 @@ const String kContractorsInWard = 'Contractors in this ward';
 const String kFairnessTitle = 'How this is kept fair';
 const List<String> kFairnessPoints = [
   'Each contractor is compared with the same kind of repair, not with all work.',
-  'Repairs in low-lying wards and in heavy-rain weeks count less against a contractor.',
+  'Repairs in low-lying wards and in heavy-rain weeks count less against a contractor. The "After allowing for…" line shows this, and "Doing well" and "To look at" use it.',
   'No rating is given where a contractor has fewer than 15 jobs in a ward.',
   'Contractors are listed A to Z. This is not a ranking.',
 ];
@@ -98,6 +98,7 @@ const String kToLookAt = 'To look at';
 const String kNotRatedInWard = 'Not rated in this ward';
 const String kThisContractor = 'This contractor';
 const String kTypicalSameWork = 'Typical, same kind of work';
+const String kAfterAllowance = 'After allowing for heavy rain and low-lying wards';
 
 /// The three scorecard measures, in display order: title, what the figure is,
 /// which way is better, and what the drill-down lists.

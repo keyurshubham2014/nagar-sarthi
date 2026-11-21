@@ -121,10 +121,12 @@ class _ScorecardCard extends ConsumerWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text('${row['name']}', style: t.titleMedium),
-            Text(
-              '${row['jobs']} jobs${spend == null ? '' : ' · ${formatInr(spend)}'} $where',
-              style: t.bodySmall?.copyWith(color: c.textSecondary),
-            ),
+            // Not rated: show only the reason, no figures at all.
+            if (rated)
+              Text(
+                '${row['jobs']} jobs${spend == null ? '' : ' · ${formatInr(spend)}'} $where',
+                style: t.bodySmall?.copyWith(color: c.textSecondary),
+              ),
             if (!rated) ...[
               const SizedBox(height: AppSpacing.s12),
               Container(
@@ -153,7 +155,7 @@ class _ScorecardCard extends ConsumerWidget {
               ),
             ] else ...[
               for (final key in scorecardMeasures.keys)
-                if (measures[key] is Map) _Measure(id: row['id'] as String, metric: key, m: measures[key] as Map, ward: ward),
+                if (measures[key] is Map) _Measure(id: row['id'] as String, metric: key, m: measures[key] as Map, jobs: row['jobs'] as num? ?? 0, ward: ward),
               const SizedBox(height: AppSpacing.s12),
               _Note(kDoingWell, '${row['strength']}', ward != null, c.success),
               const SizedBox(height: AppSpacing.s8),
@@ -169,10 +171,11 @@ class _ScorecardCard extends ConsumerWidget {
 /// One measure: the contractor's value next to the typical value for the same
 /// kind of work. Tapping lists the work orders behind it.
 class _Measure extends ConsumerWidget {
-  const _Measure({required this.id, required this.metric, required this.m, required this.ward});
+  const _Measure({required this.id, required this.metric, required this.m, required this.jobs, required this.ward});
   final String id;
   final String metric;
   final Map m;
+  final num jobs;
   final String? ward;
 
   @override
@@ -185,8 +188,8 @@ class _Measure extends ConsumerWidget {
     final count = m['count'] as num? ?? 0;
     final detail = metric == 'pricing'
         ? 'Median job billed at ${m['median_cost_ratio']}× the rate card.'
-        : 'Counted without the rain and low-lying allowance: '
-              '${formatPercent(m['plain_value'] as num? ?? 0)} vs ${formatPercent(m['plain_typical'] as num? ?? 0)} typical.';
+        : '$kAfterAllowance: ${formatPercent(m['adjusted_value'] as num? ?? 0)} '
+              '(typical ${formatPercent(m['adjusted_typical'] as num? ?? 0)}).';
 
     return Padding(
       padding: const EdgeInsets.only(top: AppSpacing.s12),
@@ -208,7 +211,7 @@ class _Measure extends ConsumerWidget {
                   Row(
                     children: [
                       Expanded(child: Text(def.title, style: t.titleSmall)),
-                      Text('$count ${def.counted}', style: t.labelMedium?.copyWith(color: c.primary)),
+                      Text('$count of $jobs ${def.counted}', style: t.labelMedium?.copyWith(color: c.primary)),
                       Icon(Icons.chevron_right, color: c.primary),
                     ],
                   ),

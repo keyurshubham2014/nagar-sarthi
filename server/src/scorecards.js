@@ -3,6 +3,8 @@ import { workOrder } from './notice.js';
 
 // Display shapes for the corporator scorecards. Every figure is the engine's;
 // "typical" is the engine's own same-method average (value minus its *_vs_method_avg).
+// value/typical are plain shares of jobs, matching the work-order lists; adjusted_* carry the
+// rain and low-lying allowance the engine's strength/improve sentences use.
 
 /** Measure -> the engine's work_order_ids list behind it. */
 const METRIC_IDS = { speed: 'sla_missed', durability: 'reopened', pricing: 'over_rate' };
@@ -18,13 +20,13 @@ function measures(audit, m, c, ward, jobs) {
   const over = ids('over_rate').length;
   return {
     speed: {
-      value: a.sla_rate, typical: r2(a.sla_rate - a.sla_vs_method_avg),
-      plain_value: m.sla_rate, plain_typical: r2(m.sla_rate - m.sla_vs_method_avg),
+      value: m.sla_rate, typical: r2(m.sla_rate - m.sla_vs_method_avg),
+      adjusted_value: a.sla_rate, adjusted_typical: r2(a.sla_rate - a.sla_vs_method_avg),
       count: ids('sla_missed').length,
     },
     durability: {
-      value: a.reopen_rate, typical: r2(a.reopen_rate - a.reopen_vs_method_avg),
-      plain_value: m.reopen_rate, plain_typical: r2(m.reopen_rate - m.reopen_vs_method_avg),
+      value: m.reopen_rate, typical: r2(m.reopen_rate - m.reopen_vs_method_avg),
+      adjusted_value: a.reopen_rate, adjusted_typical: r2(a.reopen_rate - a.reopen_vs_method_avg),
       count: ids('reopened').length,
     },
     pricing: {
