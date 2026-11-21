@@ -11,10 +11,10 @@ import '../officer/officer_panels.dart' show openWard;
 /// Opens the ward comparison (from Home's "Mumbai this monsoon").
 void openWardComparison() => appRouter.push('/wards');
 
-enum _Measure { warranty, review, budget }
+enum _Measure { warranty, review, budget, failed }
 
 /// "Wards this monsoon": the 24 wards ranked by billed-under-warranty, to
-/// review, or spend against budget. A row opens the ward page.
+/// review, spend against budget, or share of repairs failed within 30 days. A row opens the ward page.
 class WardComparisonScreen extends ConsumerStatefulWidget {
   const WardComparisonScreen({super.key});
   @override
@@ -33,16 +33,17 @@ class _WardComparisonScreenState extends ConsumerState<WardComparisonScreen> {
       caption: context.tr('Tap a ward to open its page.'),
       onRefresh: () async => ref.invalidate(mapDataProvider),
       children: [
-        Gutter(
-          child: SegmentedControl<_Measure>(
-            segments: [
-              (_Measure.warranty, context.tr('Under warranty')),
-              (_Measure.review, context.tr('To review')),
-              (_Measure.budget, context.tr('Over budget')),
-            ],
-            value: _m,
-            onChanged: (m) => setState(() => _m = m),
-          ),
+        // Pills, not a segmented control: four labels do not fit a 360 dp phone in Hindi or Marathi.
+        FilterChipRow(
+          children: [
+            for (final (m, label) in [
+              (_Measure.warranty, 'Under warranty'),
+              (_Measure.review, 'To review'),
+              (_Measure.budget, 'Over budget'),
+              (_Measure.failed, 'Failed repairs'),
+            ])
+              FilterPill(label: context.tr(label), selected: _m == m, onTap: () => setState(() => _m = m)),
+          ],
         ),
         const SizedBox(height: AppSpacing.s12),
         if (data != null)
@@ -63,16 +64,19 @@ class _WardComparisonScreenState extends ConsumerState<WardComparisonScreen> {
     final c = SaartheeColors.of(context);
     num n(Ward w, String k) => w.data[k] as num? ?? 0;
     double ratio(Ward w) => n(w, 'budget') <= 0 ? 0 : n(w, 'spend') / n(w, 'budget');
+    double failed(Ward w) => n(w, 'jobs') <= 0 ? 0 : n(w, 'fix_failed_count') / n(w, 'jobs');
     final rows = switch (_m) {
       _Measure.warranty => [...all.where((w) => n(w, 'dlp_paid_inr') > 0)]..sort((a, b) => n(b, 'dlp_paid_inr').compareTo(n(a, 'dlp_paid_inr'))),
       _Measure.review => [...all]..sort((a, b) => b.flaggedInr.compareTo(a.flaggedInr)),
       _Measure.budget => [...all]..sort((a, b) => ratio(b).compareTo(ratio(a))),
+      _Measure.failed => [...all]..sort((a, b) => failed(b).compareTo(failed(a))),
     };
     if (rows.isEmpty) return EmptyState(message: context.tr('No ward has work billed under warranty.'), pictogram: PictogramKind.warranty);
     final max = switch (_m) {
       _Measure.warranty => n(rows.first, 'dlp_paid_inr'),
       _Measure.review => rows.first.flaggedInr,
       _Measure.budget => 1,
+      _Measure.failed => failed(rows.first),
     };
     return Column(
       children: [
@@ -86,6 +90,7 @@ class _WardComparisonScreenState extends ConsumerState<WardComparisonScreen> {
                 _Measure.warranty => context.tr('{n} jobs', {'n': n(w, 'dlp_paid_count')}),
                 _Measure.review => context.tr('{p} of spend', {'p': formatPercent(w.flaggedShare)}),
                 _Measure.budget => context.tr('Spent {spend} of {budget} budget', {'spend': formatInr(w.spend), 'budget': formatInr(n(w, 'budget'))}),
+                _Measure.failed => context.tr('{n} of {jobs} repairs failed within 30 days', {'n': n(w, 'fix_failed_count'), 'jobs': n(w, 'jobs')}),
               },
               initials: w.code,
               chip: Padding(
@@ -95,15 +100,21 @@ class _WardComparisonScreenState extends ConsumerState<WardComparisonScreen> {
                     _Measure.warranty => max <= 0 ? 0 : n(w, 'dlp_paid_inr') / max,
                     _Measure.review => max <= 0 ? 0 : w.flaggedInr / max,
                     _Measure.budget => ratio(w),
+                    _Measure.failed => max <= 0 ? 0 : failed(w) / max,
                   },
                   height: 4,
-                  color: _m == _Measure.warranty ? c.info : null,
+                  color: switch (_m) {
+                    _Measure.warranty => c.info,
+                    _Measure.failed => c.error,
+                    _ => null,
+                  },
                 ),
               ),
               amount: switch (_m) {
                 _Measure.warranty => formatInr(n(w, 'dlp_paid_inr')),
                 _Measure.review => formatInr(w.flaggedInr),
                 _Measure.budget => formatPercent(ratio(w)),
+                _Measure.failed => formatPercent(failed(w)),
               },
               amountColor: _m == _Measure.budget && ratio(w) > 1 ? c.error : null,
               divider: i < rows.length - 1,
