@@ -218,13 +218,16 @@ class _FilterPillState extends State<FilterPill> {
     if (widget.selected && !old.selected) _reveal(AppMotion.of(context, AppMotion.standard));
   }
 
-  /// Scrolls the chip row (only that row, not the page) so the selected pill is in view.
+  /// Scrolls the chip row (only that row, not the page) just enough that the
+  /// selected pill is fully in view; a pill already in view does not move it.
   void _reveal(Duration d) => WidgetsBinding.instance.addPostFrameCallback((_) {
     if (!mounted) return;
     final s = Scrollable.maybeOf(context);
     final box = context.findRenderObject();
     if (s == null || box == null || s.position.axis != Axis.horizontal) return;
-    s.position.ensureVisible(box, alignment: 0.5, duration: d, curve: AppMotion.standardCurve);
+    for (final policy in [ScrollPositionAlignmentPolicy.keepVisibleAtEnd, ScrollPositionAlignmentPolicy.keepVisibleAtStart]) {
+      s.position.ensureVisible(box, alignmentPolicy: policy, duration: d, curve: AppMotion.standardCurve);
+    }
   });
 
   @override

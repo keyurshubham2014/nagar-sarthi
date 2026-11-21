@@ -154,7 +154,7 @@ class _AuditListState extends ConsumerState<AuditList> {
                 ),
                 for (final k in contractors)
                   ListRow(
-                    title: '${k['name']}',
+                    title: '${k['name']}'.replaceAll(' (synthetic)', ''),
                     chevron: false,
                     trailing: _contractor == k['id'] ? const Icon(Icons.check) : null,
                     onTap: () => Navigator.pop(sheet, k['id'] as String),
@@ -213,6 +213,9 @@ class _AuditListState extends ConsumerState<AuditList> {
           padding: EdgeInsets.fromLTRB(AppSpacing.gutter, root || DetailTitle.shown(context) ? 0 : AppSpacing.s16, AppSpacing.gutter, AppSpacing.s16),
           child: AnimatedSwitcher(
             duration: AppMotion.of(context, AppMotion.standard),
+            // Fade-through: the old line is gone before the new one appears (no overlapping text).
+            switchInCurve: const Interval(0.5, 1),
+            switchOutCurve: const Interval(0.5, 1),
             layoutBuilder: (cur, prev) => Stack(alignment: AlignmentDirectional.topStart, children: [...prev, ?cur]),
             child: Text(
               _loaded ? _caption : ' ',
@@ -239,7 +242,7 @@ class _AuditListState extends ConsumerState<AuditList> {
             FilterChipRow(
               children: [
                 FilterPill(
-                  label: contractorName == null ? 'Contractor' : '$contractorName',
+                  label: contractorName == null ? 'Contractor' : '$contractorName'.replaceAll(' (synthetic)', ''),
                   icon: Icons.engineering_outlined,
                   selected: _contractor != null,
                   onTap: _pickContractor,

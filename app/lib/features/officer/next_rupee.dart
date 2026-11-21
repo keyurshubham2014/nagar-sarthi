@@ -367,7 +367,7 @@ class _PlannerState extends ConsumerState<_Planner> {
                   controller: _typed,
                   keyboardType: const TextInputType.numberWithOptions(decimal: true),
                   textInputAction: TextInputAction.done,
-                  decoration: const InputDecoration(labelText: 'Type an amount', suffixText: 'lakh ₹', hintText: 'e.g. 7.5'),
+                  decoration: const InputDecoration(hintText: 'Type an amount, e.g. 7.5', suffixText: 'lakh ₹'),
                   onChanged: (s) {
                     final v = double.tryParse(s.trim());
                     if (v != null) _set(v * 1e5);

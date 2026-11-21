@@ -65,7 +65,11 @@ class _ShellScaffoldState extends ConsumerState<ShellScaffold> with SingleTicker
   @override
   void didUpdateWidget(ShellScaffold old) {
     super.didUpdateWidget(old);
-    if (old.shell.currentIndex != widget.shell.currentIndex) _setVisible(true);
+    if (old.shell.currentIndex != widget.shell.currentIndex) {
+      _setVisible(true);
+      // A search field focused on the tab we left must not keep the keyboard up here.
+      FocusManager.instance.primaryFocus?.unfocus();
+    }
   }
 
   @override

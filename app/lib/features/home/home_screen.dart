@@ -620,7 +620,7 @@ class _ContractorCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('${row['name']}', style: t.bodyStrong, maxLines: 2, overflow: TextOverflow.ellipsis),
+            Text('${row['name']}'.replaceAll(' (synthetic)', ''), style: t.bodyStrong, maxLines: 2, overflow: TextOverflow.ellipsis),
             const SizedBox(height: AppSpacing.s4),
             Text('${formatInr(row['spend'] as num? ?? 0)} · ${row['jobs']} jobs', style: t.caption),
             const Spacer(),
