@@ -112,14 +112,36 @@ app.get('/api/next-rupee/:ward', (req, res) => {
   });
 });
 
-// Flag rows filtered by ?ward=, ?road=, ?type= (all optional, combined with AND).
+// Flag rows, biggest rupees first. Filters (all optional, AND): ?ward= ?road= ?contractor= (id)
+// ?type= (one or comma-separated) ?q= (work order id or road name, case-insensitive).
+// Paged with ?offset= and ?limit= (default 50, max 100). Returns {total, total_inr, items}; items carry road_name.
 app.get('/api/flags', (req, res) => {
-  const { ward, road, type } = req.query;
-  res.json(
-    audit.flags.filter(
-      (f) => (!ward || f.ward_code === ward) && (!road || f.road_id === road) && (!type || f.type === type),
-    ),
-  );
+  const str = (v) => (typeof v === 'string' && v.trim() ? v.trim() : undefined);
+  const ward = str(req.query.ward);
+  const road = str(req.query.road);
+  const contractor = str(req.query.contractor);
+  const types = str(req.query.type)?.split(',');
+  const q = str(req.query.q)?.toLowerCase();
+  const offset = Math.max(0, Number.parseInt(req.query.offset, 10) || 0);
+  const limit = Math.min(100, Math.max(1, Number.parseInt(req.query.limit, 10) || 50));
+  const roadName = (id) => audit.roads[id]?.road_name ?? id;
+  const rows = audit.flags
+    .filter(
+      (f) =>
+        (!ward || f.ward_code === ward) &&
+        (!road || f.road_id === road) &&
+        (!contractor || f.contractor_id === contractor) &&
+        (!types || types.includes(f.type)) &&
+        (!q || f.work_order_id.toLowerCase().includes(q) || roadName(f.road_id).toLowerCase().includes(q)),
+    )
+    .sort((a, b) => b.cost_inr - a.cost_inr || a.work_order_id.localeCompare(b.work_order_id));
+  // Rupees to review: each work order once (a job can carry several flags); sla_missed is timing only.
+  const money = new Map(rows.filter((f) => f.type !== 'sla_missed').map((f) => [f.work_order_id, f.cost_inr]));
+  res.json({
+    total: rows.length,
+    total_inr: [...money.values()].reduce((s, v) => s + v, 0),
+    items: rows.slice(offset, offset + limit).map((f) => ({ ...f, road_name: roadName(f.road_id) })),
+  });
 });
 
 // Compact per-day shape for the monsoon slider (see timeline.js), built once.
