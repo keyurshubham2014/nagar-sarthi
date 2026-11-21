@@ -77,12 +77,12 @@ final appRouter = GoRouter(
     // Complaint trail: no ward opens on all Mumbai.
     GoRoute(
       path: '/trail',
-      builder: (_, s) => DetailPage(title: 'Complaint trail', subtitle: 'Complaint → issue → work order → outcome', body: TrailPage(ward: _q(s, 'ward'))),
+      builder: (_, s) => TrailPage(ward: _q(s, 'ward')),
     ),
     GoRoute(
       path: '/issue',
       redirect: (_, s) => _q(s, 'id') == null ? '/' : null,
-      builder: (_, s) => DetailPage(title: 'Issue ${_q(s, 'id')}', body: IssueDetail(_q(s, 'id')!)),
+      builder: (_, s) => IssueDetail(_q(s, 'id')!),
     ),
     // Detail pages that only make sense mid-flow; after a web reload (no extra) they go Home.
     GoRoute(
