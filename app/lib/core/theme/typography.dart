@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 
 import 'tokens.dart';
 
-/// Type scale (design overhaul §1 "Type"). One family: the platform default
-/// already used by the app (no bundled font files). Weights 400 / 500 / 700.
+/// Type scale (design overhaul §1 "Type"). Plus Jakarta Sans, with Noto Sans
+/// Devanagari for Hindi and Marathi (both bundled, SIL OFL). Weights 400 / 500 / 700.
 ///
 /// Devanagari (Hindi, Marathi): the theme is built with `devanagari: true`,
 /// which adds 2 px of line height and drops every negative tracking. Screens
@@ -11,9 +11,9 @@ import 'tokens.dart';
 class AppTypography {
   const AppTypography._();
 
-  static const String? heading = null; // platform default (Roboto)
-  static const String? body = null;
-  static const List<String> fallback = [];
+  static const String heading = 'Plus Jakarta Sans';
+  static const String body = 'Plus Jakarta Sans';
+  static const List<String> fallback = ['Noto Sans Devanagari'];
 
   /// No text below this size.
   static const double minSize = 12;

@@ -67,6 +67,15 @@ flutter:
     - assets/wards_real.geojson
     - assets/roads.geojson
 
+  # Open-licence fonts (SIL OFL, licences beside the files).
+  fonts:
+    - family: Plus Jakarta Sans
+      fonts:
+        - asset: assets/fonts/PlusJakartaSans.ttf
+    - family: Noto Sans Devanagari
+      fonts:
+        - asset: assets/fonts/NotoSansDevanagari.ttf
+
   # To add assets to your application, add an assets section, like this:
   # assets:
   #   - images/a_dot_burr.jpeg
