@@ -32,7 +32,11 @@ class CivicMap extends StatelessWidget {
     this.initialCameraFit,
     this.onTap,
     this.onMapReady,
+    this.interactive = true,
   });
+
+  /// False: a still picture (no pan, zoom or taps), e.g. a mini map on a page.
+  final bool interactive;
 
   /// The camera exists (fitCamera may be called from now on).
   final VoidCallback? onMapReady;
@@ -82,7 +86,7 @@ class CivicMap extends StatelessWidget {
             onMapReady: onMapReady,
             minZoom: 9,
             maxZoom: 18,
-            interactionOptions: const InteractionOptions(flags: InteractiveFlag.all & ~InteractiveFlag.rotate),
+            interactionOptions: InteractionOptions(flags: interactive ? InteractiveFlag.all & ~InteractiveFlag.rotate : InteractiveFlag.none),
           ),
           children: [
             TileLayer(
@@ -147,6 +151,11 @@ class MapColors {
   static const Color labelText = Color(0xFF0A0A0A);
   static const Color pin = Color(0xFF0A0A0A);
   static const Color onPin = Color(0xFFFFFFFF);
+
+  /// Next-rupee context markers: hospitals, schools, flood hotspots.
+  static const Color hospital = Color(0xFFC8102E);
+  static const Color school = Color(0xFF1F5FD0);
+  static const Color hotspot = Color(0xFF00838F);
 
   /// Complaint clusters by size, and monsoon complaint dots.
   static const List<Color> heat = [Color(0xFF9DB8EA), Color(0xFF4F7FDB), Color(0xFF1F4BA8)];

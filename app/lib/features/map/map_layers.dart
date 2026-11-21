@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -324,25 +326,32 @@ class _RoadLayerState extends State<_RoadLayer> {
       tween: Tween(begin: 0, end: 1),
       duration: AppMotion.of(context, AppMotion.standard),
       builder: (context, o, child) => Opacity(opacity: o, child: child),
-      child: GestureDetector(
-        onTap: () {
-          final id = _hit.value?.hitValues.firstOrNull;
-          if (id != null) widget.ctx.onRoadTap(data.roadById[id]!);
-        },
-        child: PolylineLayer<String>(
-          hitNotifier: _hit,
-          minimumHitbox: 14,
-          polylines: [
-            for (final r in roads)
-              Polyline<String>(
-                points: r.points,
-                hitValue: r.id,
-                color: roadStatusColors[r.status] ?? MapColors.road,
-                strokeWidth: r.id == sel.road ? 7 : (r.status == 'clean' ? 3 : 4),
-                borderColor: r.id == sel.road ? MapColors.selectedOutline : MapColors.roadCasing,
-                borderStrokeWidth: r.id == sel.road ? 2 : 1,
-              ),
-          ],
+      // The selected road pulses once (thickens and settles).
+      child: TweenAnimationBuilder<double>(
+        key: ValueKey(sel.road),
+        tween: Tween(begin: 0, end: 1),
+        duration: AppMotion.of(context, sel.road == null ? Duration.zero : const Duration(milliseconds: 600)),
+        curve: Curves.easeInOut,
+        builder: (context, k, _) => GestureDetector(
+          onTap: () {
+            final id = _hit.value?.hitValues.firstOrNull;
+            if (id != null) widget.ctx.onRoadTap(data.roadById[id]!);
+          },
+          child: PolylineLayer<String>(
+            hitNotifier: _hit,
+            minimumHitbox: 14,
+            polylines: [
+              for (final r in roads)
+                Polyline<String>(
+                  points: r.points,
+                  hitValue: r.id,
+                  color: roadStatusColors[r.status] ?? MapColors.road,
+                  strokeWidth: r.id == sel.road ? 7 + 6 * math.sin(math.pi * k) : (r.status == 'clean' ? 3 : 4),
+                  borderColor: r.id == sel.road ? MapColors.selectedOutline : MapColors.roadCasing,
+                  borderStrokeWidth: r.id == sel.road ? 2 : 1,
+                ),
+            ],
+          ),
         ),
       ),
     );

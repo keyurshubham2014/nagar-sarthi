@@ -7,25 +7,19 @@ import '../../app_router.dart';
 import '../../core/flag_strings.dart';
 import '../../core/prefs.dart';
 import '../../core/format.dart';
-import '../../core/map/civic_map.dart' show MapColors;
+import '../../core/map/civic_map.dart' show CivicMap, MapColors;
 import '../../core/widgets/ui.dart';
 import '../map/map_data.dart';
 import '../map/map_layers.dart';
 import 'officer_data.dart';
 import 'panel.dart';
 
-const Color kFundedPin = Color(0xFF2E7D32);
-const Color kUnfundedPin = Color(0xFF757575);
-const Color kHospital = Color(0xFFD32F2F);
-const Color kSchool = Color(0xFF1565C0);
-const Color kHotspot = Color(0xFF00838F);
-
 const nextRupeeLegend = [
   LegendEntry('Funded, by rank', MapColors.pin),
   LegendEntry('Beyond the budget', MapColors.pin, ring: true),
-  LegendEntry('Hospital', kHospital),
-  LegendEntry('School', kSchool),
-  LegendEntry('Flood hotspot', kHotspot),
+  LegendEntry('Hospital', MapColors.hospital),
+  LegendEntry('School', MapColors.school),
+  LegendEntry('Flood hotspot', MapColors.hotspot),
 ];
 
 /// Opens the ward's ranked next-rupee list and points the map's pins at that ward.
@@ -54,8 +48,8 @@ void _openSpot(WidgetRef ref, String ward, List<Json> items) {
     '${items.length} items at this spot · Ward $ward',
     ListView(
       primary: true,
-      padding: const EdgeInsets.symmetric(vertical: AppSpacing.s8),
-      children: [for (final i in items) _ItemRow(item: i, funded: i['funded'] == true, onTap: () => _openItem(ref, ward, i))],
+      padding: const EdgeInsets.only(bottom: AppSpacing.s32),
+      children: [const DetailTitle(), for (final i in items) _ItemRow(item: i, funded: i['funded'] == true, onTap: () => _openItem(ref, ward, i))],
     ),
   ));
 }
@@ -63,9 +57,50 @@ void _openSpot(WidgetRef ref, String ward, List<Json> items) {
 LatLng? _ll(Map m) =>
     m['lat'] is num && m['lon'] is num ? LatLng((m['lat'] as num).toDouble(), (m['lon'] as num).toDouble()) : null;
 
+/// Map pin: numbered black circle, filled when funded, outlined when beyond the
+/// budget; [more] other items under it show as a "+n" badge.
+class RankPin extends StatelessWidget {
+  const RankPin({super.key, required this.rank, required this.funded, this.more = 0});
+  final Object? rank;
+  final bool funded;
+  final int more;
+  @override
+  Widget build(BuildContext context) => Stack(
+    clipBehavior: Clip.none,
+    children: [
+      Container(
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: funded ? MapColors.pin : MapColors.label,
+          shape: BoxShape.circle,
+          border: Border.all(color: funded ? MapColors.label : MapColors.pin, width: 2),
+          boxShadow: AppElevation.soft(SaartheeColors.light),
+        ),
+        child: Text(
+          '$rank',
+          style: context.type.label.copyWith(color: funded ? MapColors.onPin : MapColors.labelText, fontWeight: FontWeight.w700, height: 1),
+        ),
+      ),
+      if (more > 0)
+        PositionedDirectional(
+          end: -6,
+          top: -6,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.s4, vertical: 1),
+            decoration: const ShapeDecoration(color: MapColors.label, shape: StadiumBorder()),
+            child: Text('+$more', style: context.type.label.copyWith(fontSize: 10, height: 1.2, color: MapColors.labelText, fontWeight: FontWeight.w700)),
+          ),
+        ),
+    ],
+  );
+}
+
 /// Map layer: numbered pins for the chosen ward, plus its hospitals, schools and flood hotspots.
 class NextRupeeLayer extends ConsumerWidget {
   const NextRupeeLayer({super.key});
+
+  /// Pins closer than this on screen merge into one (tap lists them); zooming in splits them.
+  static const double _pinSize = 34;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -74,6 +109,7 @@ class NextRupeeLayer extends ConsumerWidget {
     final String ward = selected ?? ref.watch(nextRupeeWardProvider) ?? ref.watch(chosenWardProvider);
     final nr = ref.watch(nextRupeeProvider(ward)).value;
     if (nr == null) return const SizedBox.shrink();
+    final camera = MapCamera.of(context);
 
     Marker place(Map m, IconData icon, Color color, String what) {
       return Marker(
@@ -83,34 +119,42 @@ class NextRupeeLayer extends ConsumerWidget {
         child: Tooltip(
           message: '$what: ${m['name']}',
           child: Container(
-            decoration: BoxDecoration(color: Colors.white, shape: BoxShape.circle, border: Border.all(color: color, width: 1.5)),
+            decoration: BoxDecoration(color: MapColors.label, shape: BoxShape.circle, border: Border.all(color: color, width: 1.5)),
             child: Icon(icon, size: 14, color: color, semanticLabel: '$what ${m['name']}'),
           ),
         ),
       );
     }
 
-    // Group items that share a point (rank order kept), so stacked pins become one tappable pin.
-    final spots = <String, List<Json>>{};
-    for (final i in (nr['items'] as List? ?? const [])) {
-      final p = _ll(i as Map);
-      if (p != null) (spots['${p.latitude.toStringAsFixed(5)},${p.longitude.toStringAsFixed(5)}'] ??= []).add(i as Json);
+    // Greedy clustering in rank order at the current zoom: an item joins the first spot
+    // whose pin it would overlap on screen, so every pin stays tappable.
+    final items = [for (final i in (nr['items'] as List? ?? const [])) if (_ll(i as Map) != null) i as Json]
+      ..sort((a, b) => (a['rank'] as num).compareTo(b['rank'] as num));
+    final spots = <(Offset, List<Json>)>[];
+    for (final i in items) {
+      final at = camera.projectAtZoom(_ll(i)!);
+      final hit = spots.where((s) => (s.$1 - at).distance < _pinSize).firstOrNull;
+      if (hit != null) {
+        hit.$2.add(i);
+      } else {
+        spots.add((at, [i]));
+      }
     }
     return MarkerLayer(
       markers: [
         for (final f in (nr['facilities'] as List? ?? const []))
           if (_ll(f) != null)
             f['type'] == 'Hospital'
-                ? place(f, Icons.local_hospital, kHospital, 'Hospital')
-                : place(f, Icons.school, kSchool, 'School'),
+                ? place(f, Icons.local_hospital, MapColors.hospital, 'Hospital')
+                : place(f, Icons.school, MapColors.school, 'School'),
         for (final h in (nr['hotspots'] as List? ?? const []))
-          if (_ll(h) != null) place(h, Icons.water_drop, kHotspot, 'Flood hotspot'),
+          if (_ll(h) != null) place(h, Icons.water_drop, MapColors.hotspot, 'Flood hotspot'),
         // Reverse so the best-ranked spot paints on top.
-        for (final group in spots.values.toList().reversed)
+        for (final (_, group) in spots.reversed)
           Marker(
             point: _ll(group.first)!,
-            width: 34,
-            height: 34,
+            width: _pinSize,
+            height: _pinSize,
             child: Semantics(
               button: true,
               label: group.length == 1
@@ -118,42 +162,7 @@ class NextRupeeLayer extends ConsumerWidget {
                   : '${group.length} next rupee items here, ranks ${group.map((i) => i['rank']).join(', ')}',
               child: GestureDetector(
                 onTap: () => _openSpot(ref, ward, group),
-                child: Stack(
-                  clipBehavior: Clip.none,
-                  children: [
-                    // Map pin: numbered black circle, filled when funded, outlined when beyond the budget.
-                    Builder(builder: (context) {
-                      final funded = group.any((i) => i['funded'] == true);
-                      return Container(
-                        alignment: Alignment.center,
-                        decoration: BoxDecoration(
-                          color: funded ? MapColors.pin : MapColors.label,
-                          shape: BoxShape.circle,
-                          border: Border.all(color: funded ? MapColors.label : MapColors.pin, width: 2),
-                          boxShadow: AppElevation.soft(SaartheeColors.light),
-                        ),
-                        child: Text(
-                          '${group.first['rank']}',
-                          style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                            color: funded ? MapColors.onPin : MapColors.labelText,
-                            height: 1,
-                          ),
-                        ),
-                      );
-                    }),
-                    if (group.length > 1)
-                      Positioned(
-                        right: -6,
-                        top: -6,
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
-                          decoration: BoxDecoration(color: Colors.black87, borderRadius: BorderRadius.circular(8)),
-                          child: Text('+${group.length - 1}',
-                              style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w700)),
-                        ),
-                      ),
-                  ],
-                ),
+                child: RankPin(rank: group.first['rank'], funded: group.any((i) => i['funded'] == true), more: group.length - 1),
               ),
             ),
           ),
@@ -292,9 +301,9 @@ class _PlannerState extends ConsumerState<_Planner> {
           constraints: const BoxConstraints(maxWidth: AppSpacing.maxContent),
           child: ListView(
             primary: true,
-            padding: const EdgeInsets.only(top: AppSpacing.s8, bottom: AppSpacing.s32),
+            padding: const EdgeInsets.only(bottom: AppSpacing.s32),
             children: [
-              PageTitle(kNextRupeeAction, caption: 'Ranked by need, safety first', detail: true),
+              PageTitle(kNextRupeeAction, caption: 'Ward ${widget.ward} · ranked by need, safety first', detail: true),
               const SizedBox(height: AppSpacing.s16),
               Gutter(
                 child: Column(
@@ -537,6 +546,36 @@ class NextRupeeDetail extends ConsumerWidget {
           format: (v) => '${_score(v)} of 100',
           explanation: 'Complaints: ${(issue['complaint_ids'] as List? ?? const []).join(', ')} · ${issue['upvotes'] ?? 0} upvotes',
         ),
+        if (_ll(item) case final at?) ...[
+          const SizedBox(height: AppSpacing.s16),
+          ClipRRect(
+            borderRadius: AppRadii.cardRadius,
+            child: SizedBox(
+              height: 180,
+              child: IgnorePointer(
+                child: CivicMap(
+                  semanticLabel: 'Map of ${issue['locality']} with this item\'s pin',
+                  center: at,
+                  initialZoom: 15.5,
+                  interactive: false,
+                  layers: [
+                    // Roads give the pin context even when map tiles do not load.
+                    if (ref.watch(mapDataProvider).value case final data?)
+                      PolylineLayer(
+                        polylines: [
+                          for (final r in data.roads)
+                            Polyline(points: r.points, color: roadStatusColors[r.status] ?? MapColors.road, strokeWidth: 4),
+                        ],
+                      ),
+                    MarkerLayer(
+                      markers: [Marker(point: at, width: 34, height: 34, child: RankPin(rank: item['rank'], funded: funded))],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
         const SectionTitle('Score breakdown'),
         for (final (i, e) in scorePartLabels.entries.indexed)
           StaggeredEntrance(

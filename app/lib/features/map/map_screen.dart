@@ -10,6 +10,7 @@ import '../../core/format.dart';
 import '../../core/i18n.dart';
 import '../../core/map/civic_map.dart';
 import '../../core/widgets/ui.dart';
+import '../officer/officer_data.dart' show roadDetailProvider, wardDetailProvider;
 import '../officer/officer_panels.dart';
 import 'map_data.dart';
 import 'map_layers.dart';
@@ -98,7 +99,7 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
             bounds: w.bounds,
             padding: EdgeInsets.fromLTRB(
               AppSpacing.s32,
-              mq.padding.top + AppSpacing.s56 + AppSpacing.s24,
+              mq.padding.top + AppSpacing.s56 + AppSpacing.s56, // room for the ward label at its northern tip
               AppSpacing.s32,
               mq.padding.bottom + 340, // preview card + credits
             ),
@@ -425,18 +426,35 @@ class _LayersSheet extends ConsumerWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         for (final l in mapLayers)
-          SwitchListTile(
-            contentPadding: const EdgeInsets.symmetric(horizontal: AppSpacing.gutter),
-            secondary: Container(
-              width: AppSpacing.categoryBadge,
-              height: AppSpacing.categoryBadge,
-              decoration: BoxDecoration(color: c.surfaceAlt, shape: BoxShape.circle),
-              child: Icon(_icons[l.id] ?? Icons.layers_outlined, size: AppSpacing.iconSmall, color: c.textPrimary),
+          Pressable(
+            onTap: () => ref.read(visibleLayersProvider.notifier).set(l.id, !visible.contains(l.id)),
+            scale: false,
+            selected: visible.contains(l.id),
+            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.gutter, vertical: AppSpacing.s12),
+            child: Row(
+              children: [
+                Container(
+                  width: AppSpacing.categoryBadge,
+                  height: AppSpacing.categoryBadge,
+                  decoration: BoxDecoration(color: c.surfaceAlt, shape: BoxShape.circle),
+                  child: Icon(_icons[l.id] ?? Icons.layers_outlined, size: AppSpacing.iconSmall, color: c.textPrimary),
+                ),
+                const SizedBox(width: AppSpacing.s16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(context.tr(l.label), style: t.bodyStrong),
+                      Text(context.tr(_layerHint[l.id] ?? ''), style: t.caption),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: AppSpacing.s8),
+                ExcludeSemantics(
+                  child: Switch(value: visible.contains(l.id), onChanged: (on) => ref.read(visibleLayersProvider.notifier).set(l.id, on)),
+                ),
+              ],
             ),
-            title: Text(context.tr(l.label), style: t.bodyStrong),
-            subtitle: Text(context.tr(_layerHint[l.id] ?? ''), style: t.caption),
-            value: visible.contains(l.id),
-            onChanged: (on) => ref.read(visibleLayersProvider.notifier).set(l.id, on),
           ),
         const SectionBreak(),
         Gutter(
@@ -676,7 +694,7 @@ class _WardPreview extends ConsumerWidget {
     final t = context.type;
     final budget = w.data['budget'] as num?;
     final ofBudget = budget == null || budget == 0 ? null : w.spend / budget;
-    final warranty = w.data['dlp_paid_count'] as num?;
+    final failed = ((ref.watch(wardDetailProvider(w.code)).value?['by_flag_type'] as Map?)?['fix_failed'] as Map?)?['count'] as num?;
     return _PreviewCard(
       title: 'Ward ${w.code}',
       subtitle: w.name == w.code ? '' : w.name,
@@ -708,7 +726,7 @@ class _WardPreview extends ConsumerWidget {
               label: context.tr('of budget spent'),
               color: (ofBudget ?? 0) > 1 ? c.error : null,
             ),
-            StatTile(value: warranty == null ? '—' : '$warranty', label: context.tr('billed under warranty')),
+            StatTile(value: failed == null ? '…' : '$failed', label: context.tr('failed repairs'), color: (failed ?? 0) > 0 ? c.error : null),
           ],
         ),
       ],
@@ -726,6 +744,7 @@ class _RoadPreview extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final t = context.type;
     final type = r.data['road_type'] as String?;
+    final jobs = (ref.watch(roadDetailProvider(r.id)).value?['work_orders'] as List?)?.length;
     return _PreviewCard(
       title: r.name,
       subtitle: ['Ward ${r.wardCode}', ?type].join(' · '),
@@ -747,7 +766,12 @@ class _RoadPreview extends ConsumerWidget {
             Text(formatInr(r.spend), style: t.figure),
             Padding(
               padding: const EdgeInsets.only(bottom: 2),
-              child: Text(context.tr('spent on this road'), style: t.caption),
+              child: Text(
+                jobs == null
+                    ? context.tr('spent on this road')
+                    : '${context.tr('spent on this road')} · ${context.tr(jobs == 1 ? '1 work order' : '{n} work orders', {'n': '$jobs'})}',
+                style: t.caption,
+              ),
             ),
           ],
         ),
