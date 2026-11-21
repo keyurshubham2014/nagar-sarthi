@@ -26,7 +26,9 @@ class MapHomeScreen extends ConsumerStatefulWidget {
   ConsumerState<MapHomeScreen> createState() => _MapHomeScreenState();
 }
 
-class _MapHomeScreenState extends ConsumerState<MapHomeScreen> {
+class _MapHomeScreenState extends ConsumerState<MapHomeScreen> with WidgetsBindingObserver {
+  late final MonsoonController _monsoon = ref.read(monsoonProvider.notifier);
+
   // When tiles last failed; cleared by a tile that loads later. A notifier, so only the banner rebuilds.
   final ValueNotifier<DateTime?> _tilesFailedAt = ValueNotifier(null);
   bool? _legendOpen; // null: open on wide screens, collapsed on phones
@@ -45,8 +47,30 @@ class _MapHomeScreenState extends ConsumerState<MapHomeScreen> {
     if (failed != null && at.isAfter(failed)) _later(() => _tilesFailedAt.value = null);
   }
 
+  // The monsoon timer must stop when the map is covered, left or the app goes to the background.
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused || state == AppLifecycleState.hidden) _monsoon.pause();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // TickerMode turns off when another route covers this one.
+    if (!TickerMode.valuesOf(context).enabled) _later(_monsoon.pause);
+  }
+
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    final monsoon = _monsoon;
+    Future.microtask(monsoon.pause);
     _tilesFailedAt.dispose();
     super.dispose();
   }

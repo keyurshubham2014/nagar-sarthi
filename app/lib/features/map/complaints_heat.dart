@@ -111,7 +111,7 @@ void showHeatSheet(BuildContext context, Map cluster) {
           children: [
             Text('$count complaints here · ${cluster['open']} $kHeatOpen', style: t.titleMedium),
             Text(
-              count > sample.length ? 'Latest ${sample.length} of $count' : 'All $count',
+              'Showing ${sample.length} of $count (newest first)',
               style: t.bodySmall,
             ),
             for (final c in sample)

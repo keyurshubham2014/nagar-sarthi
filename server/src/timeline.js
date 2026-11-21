@@ -4,7 +4,15 @@ const r4 = (n) => Math.round(n * 1e4) / 1e4;
 
 /** Per day: {d, rain, alert, tide, n, c:[[lat,lon]], r:[road_id], x:[road_id]}. n = all complaints that day. */
 export function compactTimeline(audit) {
-  return audit.timeline.map((t) => ({
+  // The engine dates a re-open at completion + 30 days; those past the last day are folded into it
+  // so the slider ends on the same failed-repair total (611) as every other screen.
+  const last = audit.timeline.at(-1).date;
+  const placed = new Set(audit.timeline.flatMap((t) => t.reopens.map((x) => x.work_order_id)));
+  const late = audit.flags
+    .filter((f) => f.type === 'fix_failed' && !placed.has(f.work_order_id))
+    .filter((f) => addDays(f.evidence.completed_at.slice(0, 10), 30) > last)
+    .map((f) => f.road_id);
+  return audit.timeline.map((t, i, all) => ({
     d: t.date,
     rain: t.rainfall_mm,
     alert: t.alert,
@@ -12,9 +20,11 @@ export function compactTimeline(audit) {
     n: t.complaints.length,
     c: t.complaints.filter((c) => c.lat != null && c.lon != null).map((c) => [r4(c.lat), r4(c.lon)]),
     r: t.repairs.map((x) => x.road_id),
-    x: t.reopens.map((x) => x.road_id),
+    x: [...t.reopens.map((x) => x.road_id), ...(i === all.length - 1 ? late : [])],
   }));
 }
+
+const addDays = (iso, n) => new Date(Date.parse(`${iso}T00:00:00Z`) + n * 864e5).toISOString().slice(0, 10);
 
 const OPEN = new Set(['Open', 'In Progress']);
 const CELL = 0.01; // grid cell in degrees, about 1 km

@@ -46,7 +46,7 @@ class Season {
       complaints += d['n'] as int;
       for (final id in d['r'] as List) {
         repairs++;
-        // Repaired after an earlier day's failed fix: paid for more than once.
+        // Repaired strictly after an earlier day's failed fix.
         if (failedRoads.contains(id)) firstPaidAgain.putIfAbsent(id as String, () => i);
         repairDays.putIfAbsent(id as String, () => []).add(i);
       }
