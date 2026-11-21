@@ -20,21 +20,65 @@ class PanelPage {
 /// Opens [page] as a full-screen detail page (back arrow returns to the tab underneath).
 void pushPanel(PanelPage page) => appRouter.push('/page', extra: page);
 
-/// Full-screen page for a [PanelPage]: Saarthee app bar with back arrow, body below.
-class DetailPage extends StatelessWidget {
-  const DetailPage({super.key, required this.title, required this.body, this.subtitle, this.actions = const []});
+/// Full-screen detail page: [TopBar] (round back button, title fading in on
+/// scroll) over [body], whose scroll view starts with a [DetailTitle] headline.
+/// [heading] false: the body draws its own headline.
+class DetailPage extends StatefulWidget {
+  const DetailPage({super.key, required this.title, required this.body, this.subtitle, this.actions = const [], this.heading = true});
   final String title;
   final String? subtitle;
   final Widget body;
   final List<Widget> actions;
+  final bool heading;
   @override
-  Widget build(BuildContext context) => Scaffold(
-    appBar: SaartheeAppBar(title: context.tr(title), subtitle: subtitle, actions: actions),
-    body: body,
-  );
+  State<DetailPage> createState() => _DetailPageState();
 }
 
-/// Scrollable page body, capped at the content width so wide screens do not stretch it.
+class _DetailPageState extends State<DetailPage> {
+  final _sc = ScrollController();
+  @override
+  void dispose() {
+    _sc.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final title = context.tr(widget.title);
+    return Scaffold(
+      backgroundColor: SaartheeColors.of(context).background,
+      appBar: TopBar(title: title, controller: _sc, actions: widget.actions),
+      body: PrimaryScrollController(
+        controller: _sc,
+        child: _DetailHeading(title: widget.heading ? title : null, subtitle: widget.subtitle, child: widget.body),
+      ),
+    );
+  }
+}
+
+class _DetailHeading extends InheritedWidget {
+  const _DetailHeading({required this.title, required this.subtitle, required super.child});
+  final String? title;
+  final String? subtitle;
+  @override
+  bool updateShouldNotify(_DetailHeading old) => old.title != title || old.subtitle != subtitle;
+}
+
+/// The detail page's headline (and caption), first item of a page body's
+/// scroll view; nothing outside a [DetailPage] (e.g. on the My Ward tab).
+class DetailTitle extends StatelessWidget {
+  const DetailTitle({super.key});
+  static bool shown(BuildContext context) => context.dependOnInheritedWidgetOfExactType<_DetailHeading>()?.title != null;
+  @override
+  Widget build(BuildContext context) {
+    final h = context.dependOnInheritedWidgetOfExactType<_DetailHeading>();
+    if (h?.title == null) return const SizedBox.shrink();
+    return PageTitle(h!.title!, caption: h.subtitle, detail: true);
+  }
+}
+
+/// Scrollable page body, capped at the content width so wide screens do not
+/// stretch it; starts with the page's [DetailTitle].
 class PanelList extends StatelessWidget {
   const PanelList({super.key, required this.children, this.controller});
   final List<Widget> children;
@@ -46,8 +90,11 @@ class PanelList extends StatelessWidget {
       return ListView(
         controller: controller,
         primary: controller == null,
-        padding: EdgeInsets.fromLTRB(side, AppSpacing.s16, side, AppSpacing.s32),
-        children: children,
+        padding: EdgeInsets.only(top: DetailTitle.shown(context) ? 0 : AppSpacing.s16, bottom: AppSpacing.s32),
+        children: [
+          Padding(padding: EdgeInsets.symmetric(horizontal: side - AppSpacing.gutter), child: const DetailTitle()),
+          for (final c in children) Padding(padding: EdgeInsets.symmetric(horizontal: side), child: c),
+        ],
       );
     },
   );
@@ -66,8 +113,11 @@ class PanelMessage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => ListView(
-    padding: const EdgeInsets.only(top: AppSpacing.s16, bottom: AppSpacing.s32),
+    primary: true,
+    padding: const EdgeInsets.only(bottom: AppSpacing.s32),
     children: [
+      const DetailTitle(),
+      const SizedBox(height: AppSpacing.s16),
       Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: AppSpacing.maxContent),
@@ -95,8 +145,8 @@ class SectionTitle extends StatelessWidget {
   final String text;
   @override
   Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.only(top: AppSpacing.sectionTitleTop, bottom: AppSpacing.s8),
-    child: Semantics(header: true, child: Text(text, style: Theme.of(context).textTheme.titleLarge)),
+    padding: const EdgeInsets.only(top: AppSpacing.sectionTitleTop, bottom: AppSpacing.sectionTitleBottom),
+    child: Semantics(header: true, child: Text(text, style: context.type.headline)),
   );
 }
 

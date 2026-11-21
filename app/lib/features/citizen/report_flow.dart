@@ -14,7 +14,7 @@ import '../../core/widgets/ui.dart';
 import '../map/map_data.dart';
 import '../officer/officer_data.dart';
 import 'ask_bot.dart';
-import 'citizen_panels.dart' hide TimelineStep;
+import 'citizen_panels.dart';
 
 // Report tab (design brief 7.6–7.9): describe → confirm → matches → filed. Same API calls and
 // rules as before; one question per step, the step's action pinned at the bottom.
@@ -27,12 +27,13 @@ class ReportScreen extends StatelessWidget {
 }
 
 /// Category tiles on step 1 (category, pictogram).
+/// (category sent to the server, short tile label, pictogram)
 const _pickTiles = [
-  ('Pothole', PictogramKind.pothole),
-  ('Waterlogging', PictogramKind.waterlogging),
-  ('Open or broken manhole', PictogramKind.manhole),
-  ('Choked drain / nullah overflow', PictogramKind.drain),
-  ('Road cave-in', PictogramKind.failedRepair),
+  ('Pothole', 'Pothole', PictogramKind.pothole),
+  ('Waterlogging', 'Waterlogging', PictogramKind.waterlogging),
+  ('Open or broken manhole', 'Open manhole', PictogramKind.manhole),
+  ('Choked drain / nullah overflow', 'Choked drain', PictogramKind.drain),
+  ('Road cave-in', 'Road cave-in', PictogramKind.failedRepair),
 ];
 
 class IntakePage extends ConsumerStatefulWidget {
@@ -45,6 +46,7 @@ class _IntakePageState extends ConsumerState<IntakePage> {
   final _text = TextEditingController();
   final _scroll = [for (var i = 0; i < 4; i++) ScrollController()];
   int _step = 0; // 0 describe, 1 confirm, 2 matches (3 = filed)
+  int _shownStep = 0;
   bool _busy = false; // analysing or submitting
   bool? _filingVoice; // which filing button is busy
   String? _error;
@@ -192,26 +194,29 @@ class _IntakePageState extends ConsumerState<IntakePage> {
   Widget build(BuildContext context) {
     final r = _result;
     final step = r == null && _step < 3 ? 0 : _step;
+    // A new step starts at its top, so bring the tab bar back (it hides on scroll).
+    if (step != _shownStep) {
+      _shownStep = step;
+      final bar = TabBarScope.maybeOf(context);
+      if (bar != null) WidgetsBinding.instance.addPostFrameCallback((_) => bar.setVisible(true));
+    }
     final page = switch (step) {
       1 => _confirm(context, r!),
       2 => _matches(context, r!),
       3 => _done(context, _filed!),
       _ => _describe(context),
     };
-    // Back steps back through the flow; the floating tab bar stays put while an action is pinned.
+    // Back steps back through the flow.
     return PopScope(
       canPop: step == 0 || step == 3,
       onPopInvokedWithResult: (didPop, _) {
         if (!didPop) _back();
       },
-      child: NotificationListener<UserScrollNotification>(
-        onNotification: (_) => true,
-        child: AnimatedSwitcher(
-          duration: AppMotion.of(context, AppMotion.standard),
-          switchInCurve: AppMotion.standardCurve,
-          switchOutCurve: AppMotion.standardCurve,
-          child: KeyedSubtree(key: ValueKey(step), child: page),
-        ),
+      child: AnimatedSwitcher(
+        duration: AppMotion.of(context, AppMotion.standard),
+        switchInCurve: AppMotion.standardCurve,
+        switchOutCurve: AppMotion.standardCurve,
+        child: KeyedSubtree(key: ValueKey(step), child: page),
       ),
     );
   }
@@ -342,9 +347,9 @@ class _IntakePageState extends ConsumerState<IntakePage> {
         Gutter(
           child: _ChoiceGrid(
             children: [
-              for (final (cat, kind) in _pickTiles)
+              for (final (cat, label, kind) in _pickTiles)
                 _ChoiceTile(
-                  label: context.tr(cat),
+                  label: context.tr(label),
                   pictogram: kind,
                   selected: _picked == cat,
                   onTap: () => setState(() => _picked = _picked == cat ? null : cat),
@@ -373,7 +378,7 @@ class _IntakePageState extends ConsumerState<IntakePage> {
     final cands = (r['locality_candidates'] as List?) ?? const [];
     final kind =
         [
-          for (final (cat, k) in _pickTiles)
+          for (final (cat, _, k) in _pickTiles)
             if (cat == _category) k,
         ].firstOrNull ??
         PictogramKind.report;

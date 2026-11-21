@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -283,7 +285,8 @@ class _LargeTitleScaffoldState extends State<LargeTitleScaffold> {
       ),
       ...?widget.slivers,
       if (widget.children != null) SliverList(delegate: SliverChildListDelegate(widget.children!)),
-      SliverPadding(padding: EdgeInsets.only(bottom: bottom + AppSpacing.s32)),
+      // A bottom bar already clears the tab bar and safe area; the body ends above it.
+      SliverPadding(padding: EdgeInsets.only(bottom: (widget.bottomBar == null ? bottom : 0) + AppSpacing.s32)),
     ];
     Widget scroll = CustomScrollView(controller: widget.controller, primary: widget.controller == null, slivers: slivers);
     if (widget.onRefresh != null) {
@@ -343,7 +346,11 @@ class BottomActionBar extends StatelessWidget {
   Widget build(BuildContext context) {
     final c = SaartheeColors.of(context);
     final mq = MediaQuery.of(context);
-    return AnimatedPadding(
+    // On a tab the bar sits above the floating tab bar; when that bar hides on
+    // scroll, this one slides down after it (a translate, so nothing relayouts).
+    final shown = TabBarScope.maybeOf(context)?.shown;
+    final drop = math.max(0.0, mq.padding.bottom - mq.viewPadding.bottom);
+    Widget bar = AnimatedPadding(
       duration: AppMotion.of(context, AppMotion.quick),
       curve: AppMotion.quickCurve,
       padding: EdgeInsets.only(bottom: mq.viewInsets.bottom),
@@ -358,6 +365,14 @@ class BottomActionBar extends StatelessWidget {
         ),
       ),
     );
+    if (shown != null && drop > 0 && mq.viewInsets.bottom == 0) {
+      final inner = bar;
+      bar = AnimatedBuilder(
+        animation: shown,
+        builder: (_, _) => Transform.translate(offset: Offset(0, drop * (1 - shown.value)), child: inner),
+      );
+    }
+    return bar;
   }
 }
 

@@ -11,6 +11,7 @@ import '../../core/prefs.dart';
 import '../../core/widgets/ui.dart';
 import '../map/map_data.dart';
 import '../officer/officer_panels.dart';
+import '../officer/panel.dart' show DetailTitle;
 import '../ward/ward_picker.dart';
 
 final _contractorsProvider = FutureProvider<List<dynamic>>(retry: (_, _) => null, (ref) => ref.watch(apiClientProvider).contractors());
@@ -31,21 +32,34 @@ class AuditScreen extends ConsumerWidget {
 /// Also the body of "one flag type in a ward" pages ([type] preset).
 /// With a [title] it is a root tab page (large title, change-ward button).
 class AuditList extends ConsumerStatefulWidget {
-  const AuditList({super.key, required this.ward, this.wardName, this.type, this.allowAllMumbai = true, this.title});
+  const AuditList({
+    super.key,
+    required this.ward,
+    this.wardName,
+    this.type,
+    this.allowAllMumbai = true,
+    this.title,
+    this.contractor,
+    this.startAllMumbai = false,
+  });
   final String ward;
   final String? wardName;
   final String? type;
   final bool allowAllMumbai;
   final String? title;
+
+  /// Preset contractor filter (from a scorecard) and starting scope.
+  final String? contractor;
+  final bool startAllMumbai;
   @override
   ConsumerState<AuditList> createState() => _AuditListState();
 }
 
 class _AuditListState extends ConsumerState<AuditList> {
   static const int _page = 30;
-  late bool _allMumbai = false;
+  late bool _allMumbai = widget.startAllMumbai;
   late String? _type = widget.type;
-  String? _contractor;
+  late String? _contractor = widget.contractor;
   final _search = TextEditingController();
   Timer? _debounce;
 
@@ -111,7 +125,7 @@ class _AuditListState extends ConsumerState<AuditList> {
     return '$n · ${formatInr(_totalInr)} ${_type == 'dlp_paid' ? 'to be claimed and verified' : 'to review'}';
   }
 
-  bool get _filtered => _contractor != null || _search.text.trim().isNotEmpty || _type != widget.type;
+  bool get _filtered => _contractor != widget.contractor || _search.text.trim().isNotEmpty || _type != widget.type;
 
   String get _emptyText {
     final q = _search.text.trim();
@@ -175,7 +189,7 @@ class _AuditListState extends ConsumerState<AuditList> {
       if (_loading || (more && _items.isNotEmpty)) {
         // Reached the end: fetch the next page.
         if (!_loading) WidgetsBinding.instance.addPostFrameCallback((_) => mounted && !_loading ? _load(reset: false) : null);
-        return Skeleton.rows(count: _items.isEmpty ? 6 : 3);
+        return Skeleton.rows(count: _items.isEmpty ? 6 : 3, well: false);
       }
       if (_items.isEmpty) {
         return EmptyState(
@@ -183,7 +197,7 @@ class _AuditListState extends ConsumerState<AuditList> {
           pictogram: PictogramKind.audit,
           actionLabel: _filtered ? 'Clear filters' : null,
           onAction: () => _set(() {
-            _contractor = null;
+            _contractor = widget.contractor;
             _type = widget.type;
             _search.clear();
           }),
@@ -193,9 +207,10 @@ class _AuditListState extends ConsumerState<AuditList> {
     }
 
     final slivers = <Widget>[
+      if (!root) const SliverToBoxAdapter(child: DetailTitle()),
       SliverToBoxAdapter(
         child: Padding(
-          padding: EdgeInsets.fromLTRB(AppSpacing.gutter, root ? 0 : AppSpacing.s16, AppSpacing.gutter, AppSpacing.s16),
+          padding: EdgeInsets.fromLTRB(AppSpacing.gutter, root || DetailTitle.shown(context) ? 0 : AppSpacing.s16, AppSpacing.gutter, AppSpacing.s16),
           child: AnimatedSwitcher(
             duration: AppMotion.of(context, AppMotion.standard),
             layoutBuilder: (cur, prev) => Stack(alignment: AlignmentDirectional.topStart, children: [...prev, ?cur]),
@@ -334,7 +349,7 @@ class FlagRow extends StatelessWidget {
     final type = f['type'] as String;
     return ListRow(
       title: '${f['road_name'] ?? f['road_id']}',
-      caption: '${f['work_order_id']} · ${f['contractor_name']}${showWard ? ' · Ward ${f['ward_code']}' : ''}',
+      caption: '${f['work_order_id']} · ${'${f['contractor_name']}'.replaceAll(' (synthetic)', '')}${showWard ? ' · Ward ${f['ward_code']}' : ''}',
       chip: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,

@@ -428,7 +428,7 @@ class _TopFlags extends ConsumerWidget {
                   index: i,
                   child: ListRow(
                     title: '${f['road_name'] ?? f['road_id']}',
-                    caption: '${f['work_order_id']} · ${f['contractor_name']}',
+                    caption: '${f['work_order_id']} · ${'${f['contractor_name']}'.replaceAll(' (synthetic)', '')}',
                     leading: _FlagWell(flagTone('${f['type']}')),
                     chip: StatusChip(flagShortLabels[f['type']] ?? flagLabel('${f['type']}'), tone: flagTone('${f['type']}')),
                     amount: formatInr(f['cost_inr'] as num? ?? 0),

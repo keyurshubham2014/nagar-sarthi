@@ -10,7 +10,7 @@ import '../../core/widgets/ui.dart';
 import '../officer/officer_data.dart';
 import '../officer/officer_panels.dart';
 import '../trail/trail_screen.dart';
-import 'citizen_panels.dart' hide TimelineStep;
+import 'citizen_panels.dart';
 
 // Track a complaint and Complaint detail (design brief 7.10, 7.11).
 

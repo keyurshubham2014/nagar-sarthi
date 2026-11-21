@@ -9,7 +9,7 @@ import '../../core/prefs.dart';
 import '../../core/widgets/ui.dart';
 import '../officer/officer_panels.dart';
 import '../trail/trail_screen.dart';
-import 'citizen_panels.dart' hide TimelineStep;
+import 'citizen_panels.dart';
 
 const String kAskBot = 'Ask about a complaint';
 void openAskBot() => appRouter.push('/ask');

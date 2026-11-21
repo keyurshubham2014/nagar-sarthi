@@ -14,7 +14,6 @@ import '../audit/audit_screen.dart';
 import '../citizen/citizen_panels.dart' show AskWardPage;
 import '../citizen/report_card.dart';
 import '../corporator/corporator_panels.dart';
-import '../map/map_data.dart';
 import '../map/map_layers.dart';
 import '../trail/trail_screen.dart';
 import 'next_rupee.dart';
@@ -123,8 +122,13 @@ class WardPanel extends ConsumerWidget {
         constraints: const BoxConstraints(maxWidth: AppSpacing.maxContent),
         child: ListView(
           primary: true,
-          padding: EdgeInsets.only(top: header == null ? AppSpacing.s16 : 0, bottom: MediaQuery.paddingOf(context).bottom + AppSpacing.s32),
+          padding: EdgeInsets.only(
+            top: header == null && !DetailTitle.shown(context) ? AppSpacing.s16 : 0,
+            bottom: MediaQuery.paddingOf(context).bottom + AppSpacing.s32,
+          ),
           children: [
+            const DetailTitle(),
+            if (DetailTitle.shown(context)) const SizedBox(height: AppSpacing.s16),
             ?header,
             ...switch (v) {
               AsyncData(:final value) => _body(context, ref, value),
@@ -281,7 +285,7 @@ class WardPanel extends ConsumerWidget {
             if (contractors.isEmpty) Text('No work orders in this ward.', style: t.caption),
             for (final k in contractors)
               LabelledBar(
-                label: '${k['name']} · ${k['jobs']} jobs',
+                label: '${'${k['name']}'.replaceAll(' (synthetic)', '')} · ${k['jobs']} jobs',
                 value: k['inr'] as num,
                 max: maxC,
                 trailing: formatInr(k['inr'] as num),
@@ -418,8 +422,10 @@ class _RoadBody extends StatelessWidget {
         constraints: const BoxConstraints(maxWidth: AppSpacing.maxContent),
         child: ListView(
           primary: true,
-          padding: const EdgeInsets.only(top: AppSpacing.s8, bottom: AppSpacing.s32),
+          padding: const EdgeInsets.only(bottom: AppSpacing.s32),
           children: [
+            const DetailTitle(),
+            const SizedBox(height: AppSpacing.s8),
             Gutter(
               child: Wrap(
                 spacing: AppSpacing.s8,
@@ -470,7 +476,7 @@ class _RoadBody extends StatelessWidget {
                             if ((wo['flags'] as List? ?? const []).contains(k)) k,
                         ];
                         return TimelineStep(
-                          title: '${wo['id']} · ${wo['contractor_name']}',
+                          title: '${wo['id']} · ${'${wo['contractor_name']}'.replaceAll(' (synthetic)', '')}',
                           meta: '${_day(wo['assigned_at'])} · ${wo['method']}',
                           amount: formatInr(wo['cost_inr'] as num? ?? 0),
                           state: TimelineNodeState.outcome,
@@ -628,51 +634,3 @@ Widget _flagWellSmall(BuildContext context, String type) => Container(
   height: AppSpacing.s8,
   decoration: BoxDecoration(color: flagToneColor(context, type), shape: BoxShape.circle),
 );
-
-// ---------------------------------------------------------------- warranty by ward
-
-class DlpWardRanking extends ConsumerWidget {
-  const DlpWardRanking(this.data, {super.key});
-  final MapData data;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final wards = [...data.wards.where((w) => (w.data['dlp_paid_inr'] as num? ?? 0) > 0)]
-      ..sort((a, b) => (b.data['dlp_paid_inr'] as num).compareTo(a.data['dlp_paid_inr'] as num));
-    if (wards.isEmpty) return const PanelMessage.empty('No ward has work billed under warranty.');
-    final max = wards.first.data['dlp_paid_inr'] as num;
-    final c = SaartheeColors.of(context);
-    return Center(
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: AppSpacing.maxContent),
-        child: ListView(
-          primary: true,
-          padding: const EdgeInsets.only(top: AppSpacing.s8, bottom: AppSpacing.s32),
-          children: [
-            Gutter(child: Text('$kToBeClaimed. Tap a ward to see its work orders.', style: context.type.caption)),
-            const SizedBox(height: AppSpacing.s8),
-            for (final (i, w) in wards.indexed)
-              StaggeredEntrance(
-                index: i,
-                child: ListRow(
-                  initials: '${i + 1}',
-                  title: '${w.code} · ${w.name}',
-                  caption: '${w.data['dlp_paid_count']} jobs',
-                  chip: Padding(
-                    padding: const EdgeInsets.only(top: AppSpacing.s4),
-                    child: ProgressBar(
-                      value: (w.data['dlp_paid_inr'] as num) / max,
-                      color: c.info,
-                      semanticLabel: 'Share of the largest ward',
-                    ),
-                  ),
-                  amount: formatInr(w.data['dlp_paid_inr'] as num),
-                  onTap: () => openWard(w.code),
-                ),
-              ),
-          ],
-        ),
-      ),
-    );
-  }
-}

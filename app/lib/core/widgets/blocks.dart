@@ -494,64 +494,70 @@ class Timeline extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         for (final (i, s) in steps.indexed)
-          IntrinsicHeight(
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                SizedBox(
-                  width: 24,
-                  child: Column(
-                    children: [
-                      Container(
-                        width: 2,
-                        height: 6,
-                        color: i == 0 ? NeemFixed.transparent : c.border,
-                      ),
-                      Container(
-                        width: AppSpacing.timelineDot,
-                        height: AppSpacing.timelineDot,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: switch (s.state) {
-                            TimelineNodeState.done => c.primary,
-                            TimelineNodeState.pending => c.surface,
-                            TimelineNodeState.outcome => s.color ?? c.primary,
-                          },
-                          border: s.state == TimelineNodeState.pending ? Border.all(color: c.borderStrong, width: 2) : null,
-                        ),
-                      ),
-                      Expanded(
-                        child: Container(width: 2, color: i == steps.length - 1 ? NeemFixed.transparent : c.border),
-                      ),
-                    ],
-                  ),
+          // Rail drawn as a positioned fill (no IntrinsicHeight: it over-measured Devanagari text).
+          Stack(
+            children: [
+              // Rail: from this node down to the next; the last step only draws in to its node.
+              if (steps.length > 1)
+                PositionedDirectional(
+                  start: 11,
+                  top: i == 0 ? 12 : 0,
+                  bottom: i == steps.length - 1 ? null : 0,
+                  height: i == steps.length - 1 ? 12 : null,
+                  width: 2,
+                  child: ColoredBox(color: c.border),
                 ),
-                const SizedBox(width: AppSpacing.s12),
-                Expanded(
-                  child: Padding(
-                    padding: EdgeInsets.only(bottom: i == steps.length - 1 ? 0 : AppSpacing.s20),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Expanded(child: Text(s.title, style: t.bodyStrong)),
-                            if (s.amount != null) ...[
-                              const SizedBox(width: AppSpacing.s8),
-                              Text(s.amount!, style: t.bodyStrong.copyWith(fontFeatures: const [FontFeature.tabularFigures()])),
-                            ],
-                          ],
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  SizedBox(
+                    width: 24,
+                    child: Padding(
+                      padding: const EdgeInsets.only(top: 6),
+                      child: Center(
+                        child: Container(
+                          width: AppSpacing.timelineDot,
+                          height: AppSpacing.timelineDot,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: switch (s.state) {
+                              TimelineNodeState.done => c.primary,
+                              TimelineNodeState.pending => c.surface,
+                              TimelineNodeState.outcome => s.color ?? c.primary,
+                            },
+                            border: s.state == TimelineNodeState.pending ? Border.all(color: c.borderStrong, width: 2) : null,
+                          ),
                         ),
-                        if (s.meta != null) Text(s.meta!, style: t.caption),
-                        if (s.chip != null) ...[const SizedBox(height: AppSpacing.s4), s.chip!],
-                        if (s.child != null) ...[const SizedBox(height: AppSpacing.s8), s.child!],
-                      ],
+                      ),
                     ),
                   ),
-                ),
-              ],
-            ),
+                  const SizedBox(width: AppSpacing.s12),
+                  Expanded(
+                    child: Padding(
+                      padding: EdgeInsets.only(bottom: i == steps.length - 1 ? 0 : AppSpacing.s20),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Expanded(child: Text(s.title, style: t.bodyStrong)),
+                              if (s.amount != null) ...[
+                                const SizedBox(width: AppSpacing.s8),
+                                Text(s.amount!, style: t.bodyStrong.copyWith(fontFeatures: const [FontFeature.tabularFigures()])),
+                              ],
+                            ],
+                          ),
+                          if (s.meta != null) Text(s.meta!, style: t.caption),
+                          if (s.chip != null) ...[const SizedBox(height: AppSpacing.s4), s.chip!],
+                          if (s.child != null) ...[const SizedBox(height: AppSpacing.s8), s.child!],
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
           ),
       ],
     );

@@ -23,7 +23,7 @@ enum PictogramKind {
   pothole(Icons.edit_road_outlined, 'Pothole'),
   waterlogging(Icons.waves_outlined, 'Waterlogging'),
   manhole(Icons.adjust_outlined, 'Manhole'),
-  drain(Icons.water_outlined, 'Drain'),
+  drain(Icons.plumbing_outlined, 'Drain'),
   failedRepair(Icons.construction_outlined, 'Failed repair'),
   warranty(Icons.verified_user_outlined, 'Warranty'),
   hospital(Icons.local_hospital_outlined, 'Hospital'),

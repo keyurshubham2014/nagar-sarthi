@@ -268,18 +268,18 @@ class Skeleton extends StatefulWidget {
   const Skeleton({super.key, required this.child});
   final Widget child;
 
-  /// [count] list-row placeholders (40 px well, two lines).
-  static Widget rows({int count = 4}) => Skeleton(
+  /// [count] list-row placeholders: 40 px well (or, without [well], an amount
+  /// on the right, as on Audit rows) and two lines.
+  static Widget rows({int count = 4, bool well = true}) => Skeleton(
     child: Column(
       children: [
         for (var i = 0; i < count; i++)
-          const Padding(
-            padding: EdgeInsets.symmetric(horizontal: AppSpacing.gutter, vertical: AppSpacing.s12),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.gutter, vertical: AppSpacing.s12),
             child: Row(
               children: [
-                SkeletonBox(width: 40, height: 40, circle: true),
-                SizedBox(width: AppSpacing.s16),
-                Expanded(
+                if (well) ...[const SkeletonBox(width: 40, height: 40, circle: true), const SizedBox(width: AppSpacing.s16)],
+                const Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -289,6 +289,7 @@ class Skeleton extends StatefulWidget {
                     ],
                   ),
                 ),
+                if (!well) ...[const SizedBox(width: AppSpacing.s16), const SkeletonBox(width: 56, height: 14)],
               ],
             ),
           ),

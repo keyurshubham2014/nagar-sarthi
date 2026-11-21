@@ -310,11 +310,6 @@ class _GalleryState extends State<_Gallery> {
         Gutter(
           child: Column(
             children: [
-              SunriseActionCard(title: 'Report a problem', hint: 'Pothole, waterlogging, a repair that failed', onPressed: () {}),
-              gap,
-              HeaderActionCard(title: 'Open audit', hint: '24 items to review', icon: Icons.fact_check_outlined, onPressed: () {}),
-              gap,
-              NavCard(icon: Icons.route_outlined, title: 'Complaint trail', subtitle: 'Complaint → issue → work order', onTap: () {}),
               const ScorecardStatTile(value: '47%', label: 'Durability', barFraction: 0.47),
             ],
           ),

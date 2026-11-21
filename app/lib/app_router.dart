@@ -74,7 +74,7 @@ final appRouter = GoRouter(
     GoRoute(
       path: '/next-rupee',
       redirect: (_, s) => _q(s, 'ward') == null ? '/' : null,
-      builder: (_, s) => DetailPage(title: 'Next rupee · Ward ${_q(s, 'ward')}', body: NextRupeeList(_q(s, 'ward')!)),
+      builder: (_, s) => DetailPage(title: 'Next rupee · Ward ${_q(s, 'ward')}', heading: false, body: NextRupeeList(_q(s, 'ward')!)),
     ),
     // Complaint trail: no ward opens on all Mumbai.
     GoRoute(

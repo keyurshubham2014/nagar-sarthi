@@ -191,7 +191,7 @@ class _DotPulseState extends State<_DotPulse> with SingleTickerProviderStateMixi
 
 /// Filter pill: grey; selected = black with white text. Light haptic on tap.
 /// 36 visual height inside a 48 target. Use inside [FilterChipRow].
-class FilterPill extends StatelessWidget {
+class FilterPill extends StatefulWidget {
   const FilterPill({super.key, required this.label, required this.selected, required this.onTap, this.icon, this.count});
   final String label;
   final bool selected;
@@ -202,7 +202,38 @@ class FilterPill extends StatelessWidget {
   final int? count;
 
   @override
+  State<FilterPill> createState() => _FilterPillState();
+}
+
+class _FilterPillState extends State<FilterPill> {
+  @override
+  void initState() {
+    super.initState();
+    if (widget.selected) _reveal(Duration.zero);
+  }
+
+  @override
+  void didUpdateWidget(FilterPill old) {
+    super.didUpdateWidget(old);
+    if (widget.selected && !old.selected) _reveal(AppMotion.of(context, AppMotion.standard));
+  }
+
+  /// Scrolls the chip row (only that row, not the page) so the selected pill is in view.
+  void _reveal(Duration d) => WidgetsBinding.instance.addPostFrameCallback((_) {
+    if (!mounted) return;
+    final s = Scrollable.maybeOf(context);
+    final box = context.findRenderObject();
+    if (s == null || box == null || s.position.axis != Axis.horizontal) return;
+    s.position.ensureVisible(box, alignment: 0.5, duration: d, curve: AppMotion.standardCurve);
+  });
+
+  @override
   Widget build(BuildContext context) {
+    final label = widget.label;
+    final selected = widget.selected;
+    final onTap = widget.onTap;
+    final icon = widget.icon;
+    final count = widget.count;
     final c = SaartheeColors.of(context);
     final t = AppTypeScale.of(context);
     final fg = selected ? c.onPrimary : c.textPrimary;

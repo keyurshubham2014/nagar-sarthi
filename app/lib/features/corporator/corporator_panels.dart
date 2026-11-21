@@ -9,8 +9,9 @@ import '../../core/format.dart';
 import '../../core/widgets/claude_draft_sheet.dart';
 import '../../core/widgets/ui.dart';
 import '../officer/officer_data.dart' show Json;
+import '../audit/audit_screen.dart' show AuditList;
 import '../officer/officer_panels.dart' show openRoad;
-import '../officer/panel.dart' show PanelPage, pushPanel;
+import '../officer/panel.dart' show DetailTitle, PanelPage, pushPanel;
 
 // Corporator flow: fair contractor scorecards and the ward brief. Every figure
 // comes from the server as the audit engine produced it; nothing is ranked here.
@@ -64,8 +65,10 @@ class ScorecardList extends ConsumerWidget {
     child: ConstrainedBox(
       constraints: const BoxConstraints(maxWidth: AppSpacing.maxContent),
       child: ListView(
-        padding: EdgeInsets.only(top: AppSpacing.s8, bottom: MediaQuery.paddingOf(context).bottom + AppSpacing.s32),
+        primary: true,
+        padding: EdgeInsets.only(bottom: MediaQuery.paddingOf(context).bottom + AppSpacing.s32),
         children: [
+          const DetailTitle(),
           if (header != null) Gutter(child: header!),
           _ScorecardBody(
             v: ref.watch(scorecardsProvider(ward)),
@@ -272,7 +275,6 @@ class ContractorPage extends ConsumerWidget {
 
   List<Widget> _scorecard(BuildContext context, WidgetRef ref, Json row) {
     final c = SaartheeColors.of(context);
-    final t = AppTypeScale.of(context);
     final rated = row['rated'] == true;
     final measures = (row['measures'] as Map?) ?? const {};
     final jobs = row['jobs'] as num? ?? 0;
@@ -358,8 +360,15 @@ class ContractorPage extends ConsumerWidget {
         ),
       if (rated) ...[
         const Gutter(child: SectionHeading('Work orders')),
-        Gutter(child: Text('See this contractor’s flagged work orders', style: t.caption)),
-        const SizedBox(height: AppSpacing.s4),
+        ListRow(
+          icon: Icons.fact_check_outlined,
+          title: 'See this contractor’s flagged work orders',
+          caption: ward == null ? 'In Audit, across Mumbai' : 'In Audit, Ward $ward',
+          onTap: () => pushPanel(PanelPage(
+            '${_plainName(row['name'])} · flagged',
+            AuditList(ward: ward ?? chosen, contractor: row['id'] as String, startAllMumbai: ward == null),
+          )),
+        ),
         for (final (i, k) in keys.indexed)
           ListRow(
             icon: Icons.assignment_outlined,
@@ -506,8 +515,10 @@ class MeasureWorkOrders extends ConsumerWidget {
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: AppSpacing.maxContent),
         child: ListView(
-          padding: EdgeInsets.only(top: AppSpacing.s8, bottom: MediaQuery.paddingOf(context).bottom + AppSpacing.s32),
+          primary: true,
+          padding: EdgeInsets.only(bottom: MediaQuery.paddingOf(context).bottom + AppSpacing.s32),
           children: [
+            const DetailTitle(),
             if (d == null)
               v.hasError
                   ? ErrorState(message: 'Could not load these work orders.', onRetry: () => ref.invalidate(measureWorkOrdersProvider(q)))
