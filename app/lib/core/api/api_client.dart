@@ -84,6 +84,18 @@ class ApiClient {
       _get('/api/next-rupee/${Uri.encodeComponent(ward)}');
   Future<List<dynamic>> timeline() => _get('/api/timeline');
 
+  /// Fair scorecards, alphabetical; [ward] scopes them to one ward.
+  Future<Map<String, dynamic>> scorecards({String? ward}) =>
+      _call(() => _dio.get('/api/scorecards', queryParameters: {'ward': ?ward}));
+
+  /// Work orders behind one measure (`speed`, `durability`, `pricing`): up to 100 rows and `total`.
+  Future<Map<String, dynamic>> contractorWorkOrders(String id, String metric, {String? ward}) => _call(
+    () => _dio.get(
+      '/api/contractors/${Uri.encodeComponent(id)}/work-orders',
+      queryParameters: {'metric': metric, 'ward': ?ward},
+    ),
+  );
+
   /// Flag rows from audit.json, filtered by any of ward, road and type.
   Future<List<dynamic>> flags({String? ward, String? road, String? type}) => _call(
     () => _dio.get<List<dynamic>>(

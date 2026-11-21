@@ -77,3 +77,50 @@ const Map<String, String> evidenceLabels = {
   'sla_hours': 'Time allowed (hours)',
   'method_miss_rate': 'Share of same-method jobs running late',
 };
+
+// ---- Corporator scorecards and ward brief (TASK-05). Neutral wording only: no ranks, no "best/worst".
+
+const String kScorecardsTitle = 'Contractor scorecards';
+const String kWardBrief = 'Ward brief';
+const String kContractorsInWard = 'Contractors in this ward';
+const String kFairnessTitle = 'How this is kept fair';
+const List<String> kFairnessPoints = [
+  'Each contractor is compared with the same kind of repair, not with all work.',
+  'Repairs in low-lying wards and in heavy-rain weeks count less against a contractor.',
+  'No rating is given where a contractor has fewer than 15 jobs in a ward.',
+  'Contractors are listed A to Z. This is not a ranking.',
+];
+const String kDoingWell = 'Doing well';
+const String kToLookAt = 'To look at';
+const String kNotRatedInWard = 'Not rated in this ward';
+const String kThisContractor = 'This contractor';
+const String kTypicalSameWork = 'Typical, same kind of work';
+
+/// The three scorecard measures, in display order: title, what the figure is,
+/// which way is better, and what the drill-down lists.
+const Map<String, ({String title, String what, String better, String listed, String counted})> scorecardMeasures = {
+  'speed': (
+    title: 'Speed (SLA)',
+    what: 'Finished on time',
+    better: 'Higher is better',
+    listed: 'Jobs finished late',
+    counted: 'late',
+  ),
+  'durability': (
+    title: 'Durability (repairs that last)',
+    what: 'Re-opened within 30 days',
+    better: 'Lower is better',
+    listed: 'Repairs re-opened within 30 days',
+    counted: 're-opened',
+  ),
+  'pricing': (
+    title: 'Pricing against the rate card',
+    what: 'Jobs billed above 1.5× the rate card',
+    better: 'Lower is better',
+    listed: 'Jobs billed above the standard rate',
+    counted: 'above rate',
+  ),
+};
+
+/// Ward brief languages: code -> name in its own script.
+const Map<String, String> briefLanguages = {'en': 'English', 'hi': 'हिंदी', 'mr': 'मराठी'};

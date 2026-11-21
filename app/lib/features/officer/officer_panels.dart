@@ -5,6 +5,7 @@ import '../../core/flag_strings.dart';
 import '../../core/format.dart';
 import '../../core/theme/tokens.dart';
 import '../../core/widgets/claude_draft_sheet.dart';
+import '../corporator/corporator_panels.dart';
 import '../map/map_data.dart';
 import '../map/map_layers.dart';
 import 'next_rupee.dart';
@@ -140,6 +141,25 @@ class WardPanel extends ConsumerWidget {
           onPressed: () => showNextRupee(ref, code),
           icon: const Icon(Icons.place_outlined),
           label: const Text(kNextRupeeAction),
+        ),
+        const SizedBox(height: AppSpacing.s8),
+        Wrap(
+          spacing: AppSpacing.s8,
+          runSpacing: AppSpacing.s8,
+          children: [
+            OutlinedButton.icon(
+              onPressed: () => showWardBrief(context, code),
+              icon: const Icon(Icons.description_outlined),
+              label: const Text(kWardBrief),
+            ),
+            OutlinedButton.icon(
+              onPressed: () => ref
+                  .read(panelProvider.notifier)
+                  .push(PanelPage('$kContractorsInWard · Ward $code', ScorecardList(ward: code))),
+              icon: const Icon(Icons.fact_check_outlined),
+              label: const Text(kContractorsInWard),
+            ),
+          ],
         ),
         const SectionTitle('Top contractors by spend'),
         if (contractors.isEmpty) const Text('No work orders in this ward.'),

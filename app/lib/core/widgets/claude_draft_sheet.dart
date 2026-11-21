@@ -16,19 +16,31 @@ Future<void> showClaudeDraftSheet(
   required String title,
   required String feature,
   required Map<String, dynamic> body,
+  Map<String, String>? languages,
+  String textLabel = 'Draft letter (editable)',
 }) => showModalBottomSheet<void>(
   context: context,
   isScrollControlled: true,
   useSafeArea: true,
   constraints: const BoxConstraints(maxWidth: 760),
-  builder: (_) => _DraftSheet(title: title, feature: feature, body: body),
+  builder: (_) => _DraftSheet(title: title, feature: feature, body: body, languages: languages, textLabel: textLabel),
 );
 
 class _DraftSheet extends ConsumerStatefulWidget {
-  const _DraftSheet({required this.title, required this.feature, required this.body});
+  const _DraftSheet({
+    required this.title,
+    required this.feature,
+    required this.body,
+    this.languages,
+    required this.textLabel,
+  });
   final String title;
   final String feature;
   final Map<String, dynamic> body;
+
+  /// Code -> label. Adds a language switch that redrafts with `body['language']`.
+  final Map<String, String>? languages;
+  final String textLabel;
   @override
   ConsumerState<_DraftSheet> createState() => _DraftSheetState();
 }
@@ -40,6 +52,7 @@ class _DraftSheetState extends ConsumerState<_DraftSheet> {
   String? _source;
   String? _error;
   Timer? _copiedTimer;
+  late String? _lang = widget.languages == null ? null : (widget.body['language'] as String? ?? widget.languages!.keys.first);
 
   @override
   void initState() {
@@ -60,7 +73,8 @@ class _DraftSheetState extends ConsumerState<_DraftSheet> {
       _error = null;
     });
     try {
-      final reply = await ref.read(apiClientProvider).claude(widget.feature, widget.body);
+      final body = {...widget.body, 'language': ?_lang};
+      final reply = await ref.read(apiClientProvider).claude(widget.feature, body);
       if (!mounted) return;
       _text.text = reply.text;
       setState(() => _source = reply.source);
@@ -111,6 +125,20 @@ class _DraftSheetState extends ConsumerState<_DraftSheet> {
               IconButton(tooltip: 'Close', icon: const Icon(Icons.close), onPressed: () => Navigator.pop(context)),
             ],
           ),
+          if (widget.languages case final langs?) ...[
+            const SizedBox(height: AppSpacing.s4),
+            SegmentedButton<String>(
+              segments: [for (final e in langs.entries) ButtonSegment(value: e.key, label: Text(e.value))],
+              selected: {_lang!},
+              showSelectedIcon: false,
+              onSelectionChanged: _busy
+                  ? null
+                  : (s) {
+                      setState(() => _lang = s.first);
+                      _draft();
+                    },
+            ),
+          ],
           const SizedBox(height: AppSpacing.s8),
           SizedBox(
             height: MediaQuery.sizeOf(context).height * 0.55,
@@ -139,10 +167,10 @@ class _DraftSheetState extends ConsumerState<_DraftSheet> {
                     maxLines: null,
                     textAlignVertical: TextAlignVertical.top,
                     style: t.bodyMedium,
-                    decoration: const InputDecoration(
-                      labelText: 'Draft letter (editable)',
+                    decoration: InputDecoration(
+                      labelText: widget.textLabel,
                       alignLabelWithHint: true,
-                      border: OutlineInputBorder(),
+                      border: const OutlineInputBorder(),
                     ),
                   ),
           ),

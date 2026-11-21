@@ -4,6 +4,7 @@ import { config, anthropicKey } from './config.js';
 import { audit } from './audit.js';
 import { dbStatus } from './db.js';
 import { relay } from './claude.js';
+import { scorecards, contractorWorkOrders } from './scorecards.js';
 import { errorHandler, notFound } from './errors.js';
 
 const app = express();
@@ -73,6 +74,17 @@ app.get('/api/roads/:id', (req, res) => {
 
 app.get('/api/contractors', (_req, res) => {
   res.json(Object.entries(audit.contractors).map(([id, c]) => ({ id, ...c })));
+});
+
+// Fair scorecards, alphabetical; ?ward= scopes to one ward (not-rated below the minimum jobs).
+app.get('/api/scorecards', (req, res) => {
+  res.json(scorecards(audit, typeof req.query.ward === 'string' ? req.query.ward : undefined));
+});
+
+// Work orders behind one scorecard measure: ?metric=speed|durability|pricing[&ward=CODE], max 100 rows + total.
+app.get('/api/contractors/:id/work-orders', (req, res) => {
+  const { metric, ward } = req.query;
+  res.json(contractorWorkOrders(audit, req.params.id, metric, typeof ward === 'string' ? ward : undefined));
 });
 
 // Includes the ward's hospitals, schools and flood hotspots for the pin layer.

@@ -4,6 +4,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import { config, anthropicKey } from './config.js';
 import { notFound, badRequest } from './errors.js';
 import { notice } from './notice.js';
+import { brief } from './brief.js';
 
 /**
  * Claude feature registry. Later tasks add entries (notice, brief, intake, question):
@@ -27,6 +28,7 @@ export const features = {
     fallbackKey: (body) => (typeof body.key === 'string' ? body.key : 'default'),
   },
   notice,
+  brief,
 };
 
 // Fallback text may hold {{name}} tokens, filled from prepare()'s `vars`.
@@ -43,7 +45,9 @@ function getClient() {
 async function fallbackText(name, key) {
   try {
     const table = JSON.parse(await readFile(path.join(config.fallbacksDir, `${name}.json`), 'utf8'));
-    return table[key] ?? table.default ?? '';
+    // key comes from the client: own string entries only (no '__proto__' and the like).
+    const text = Object.hasOwn(table, key) ? table[key] : table.default;
+    return typeof text === 'string' ? text : typeof table.default === 'string' ? table.default : '';
   } catch (e) {
     console.warn(`[claude] fallback file for ${name} unreadable: ${e.message}`);
     return '';

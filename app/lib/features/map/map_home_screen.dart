@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/map/civic_map.dart';
 import '../../core/flag_strings.dart';
 import '../../core/theme/tokens.dart';
+import '../corporator/corporator_panels.dart';
 import '../officer/officer_data.dart';
 import '../officer/officer_panels.dart';
 import '../officer/panel.dart';
@@ -58,6 +59,11 @@ class _MapHomeScreenState extends ConsumerState<MapHomeScreen> {
       appBar: AppBar(
         title: const Text('Nagar Sarthi'),
         actions: [
+          IconButton(
+            tooltip: kScorecardsTitle,
+            icon: const Icon(Icons.fact_check_outlined),
+            onPressed: () => openScorecards(context),
+          ),
           IconButton(
             tooltip: 'Departments',
             icon: const Icon(Icons.apartment_outlined),

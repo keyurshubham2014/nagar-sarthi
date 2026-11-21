@@ -13,10 +13,10 @@ const inr = (n) => `₹${Math.round(n).toLocaleString('en-IN')}`;
 const day = (s) => (s ? String(s).slice(0, 10) : 'n/a');
 
 let woIndex;
-function workOrder(audit, id) {
+export function workOrder(audit, id) {
   woIndex ??= new Map(
     Object.entries(audit.roads).flatMap(([roadId, r]) =>
-      r.work_orders.map((wo) => [wo.id, { ...wo, road_id: roadId, road_name: r.road_name }]),
+      r.work_orders.map((wo) => [wo.id, { ...wo, road_id: roadId, road_name: r.road_name, ward_code: r.ward_code }]),
     ),
   );
   return woIndex.get(id);
