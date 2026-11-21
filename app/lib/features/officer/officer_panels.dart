@@ -15,6 +15,7 @@ import '../citizen/report_card.dart';
 import '../corporator/corporator_panels.dart';
 import '../map/map_data.dart';
 import '../map/map_layers.dart';
+import '../trail/trail_screen.dart';
 import 'next_rupee.dart';
 import 'officer_data.dart';
 import 'panel.dart';
@@ -155,6 +156,12 @@ class WardPanel extends ConsumerWidget {
         if (role == 'corporator') NavCard(icon: Icons.description_outlined, title: kWardBrief, subtitle: 'One page in English, हिंदी or मराठी', onTap: () => showWardBrief(context, code)),
         if (role != 'citizen')
           NavCard(icon: Icons.place_outlined, title: kNextRupeeAction, subtitle: 'Open issues ranked by need, within the budget left', onTap: () => showNextRupee(ref, code)),
+        NavCard(
+          icon: Icons.account_tree_outlined,
+          title: 'Complaint trail',
+          subtitle: 'Complaints → issues → work orders → what happened',
+          onTap: () => openTrail(code),
+        ),
         NavCard(
           icon: Icons.engineering_outlined,
           title: kContractorsInWard,
@@ -385,13 +392,15 @@ class _WorkOrderCard extends StatelessWidget {
                 ],
               ),
             if ((wo['linked_complaint_ids'] as List? ?? const []).isNotEmpty)
-              Padding(
-                padding: const EdgeInsets.only(bottom: AppSpacing.s8),
-                child: Text('Complaints: ${(wo['linked_complaint_ids'] as List).join(', ')}',
-                    style: t.bodySmall?.copyWith(color: c.textSecondary)),
-              )
-            else
-              const SizedBox(height: AppSpacing.s8),
+              Text('Complaints: ${(wo['linked_complaint_ids'] as List).join(', ')}', style: t.bodySmall?.copyWith(color: c.textSecondary)),
+            for (final issue in (wo['issue_ids'] as List? ?? const []))
+              TextButton.icon(
+                style: TextButton.styleFrom(padding: EdgeInsets.zero),
+                onPressed: () => openIssue('$issue'),
+                icon: const Icon(Icons.account_tree_outlined),
+                label: Text('Complaint trail: $issue'),
+              ),
+            const SizedBox(height: AppSpacing.s8),
           ],
         ),
       ),

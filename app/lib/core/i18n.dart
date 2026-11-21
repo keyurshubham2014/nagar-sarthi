@@ -314,4 +314,17 @@ const Map<String, Map<String, String>> _strings = {
     'mr': 'नकाशा आणि वॉर्डची आकडेवारी सर्वांसाठी खुली आहे. तक्रार नोंदवण्यासाठी किंवा नोटीस तयार करण्यासाठी साइन इन करा.',
   },
   'Synthetic data, how flags work, credits': {'hi': 'कृत्रिम डेटा, फ़्लैग कैसे बनते हैं, श्रेय', 'mr': 'कृत्रिम डेटा, फ्लॅग कसे ठरतात, श्रेय'},
+
+  // Complaint trail on the complaint page
+  'Reported as {a} → corrected to {b}': {'hi': '{a} के रूप में दर्ज → सुधार कर {b}', 'mr': '{a} म्हणून नोंद → दुरुस्त करून {b}'},
+  'Part of issue {id}': {'hi': 'मुद्दा {id} का हिस्सा', 'mr': 'मुद्दा {id} चा भाग'},
+  'Grouped with other reports of the same problem.': {
+    'hi': 'इसी समस्या की दूसरी शिकायतों के साथ जोड़ा गया।',
+    'mr': 'याच समस्येच्या इतर तक्रारींसोबत जोडले.',
+  },
+  'Grouped with reports of the same problem. Its work order is our best match (inferred link), not BMC’s record.': {
+    'hi': 'इसी समस्या की शिकायतों के साथ जोड़ा गया। इसका वर्क ऑर्डर हमारा सबसे करीबी मिलान है (अनुमानित लिंक), BMC का रिकॉर्ड नहीं।',
+    'mr': 'याच समस्येच्या तक्रारींसोबत जोडले. याचा वर्क ऑर्डर आमचा सर्वात जवळचा जुळणारा आहे (अनुमानित लिंक), BMC ची नोंद नाही.',
+  },
+  'See the full trail': {'hi': 'पूरा रास्ता देखें', 'mr': 'संपूर्ण मार्ग पाहा'},
 };

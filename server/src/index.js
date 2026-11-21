@@ -9,6 +9,7 @@ import { scorecards, contractorWorkOrders } from './scorecards.js';
 import { errorHandler, notFound, badRequest } from './errors.js';
 import { login, seedUsers, session, needUser, needRole } from './auth.js';
 import { compactTimeline, complaintsHeat } from './timeline.js';
+import { issuesList, issueDetail, linkerSummary, issuesForWorkOrder } from './issues.js';
 import { localities, understand, findMatches, localityByName, createComplaint, complaintDetail, complaintsAt } from './citizen.js';
 
 const app = express();
@@ -82,8 +83,14 @@ app.get('/api/roads', (_req, res) => {
   );
 });
 
+// Each work order carries issue_ids: the linker issues that point at it (complaint trail).
 app.get('/api/roads/:id', (req, res) => {
-  res.json({ road_id: req.params.id, ...lookup(audit.roads, req.params.id, `Road '${req.params.id}'`) });
+  const r = lookup(audit.roads, req.params.id, `Road '${req.params.id}'`);
+  res.json({
+    road_id: req.params.id,
+    ...r,
+    work_orders: r.work_orders.map((wo) => ({ ...wo, issue_ids: issuesForWorkOrder(audit, wo.id) })),
+  });
 });
 
 app.get('/api/contractors', (_req, res) => {
@@ -143,6 +150,12 @@ app.get('/api/flags', (req, res) => {
     items: rows.slice(offset, offset + limit).map((f) => ({ ...f, road_name: roadName(f.road_id) })),
   });
 });
+
+// Complaint trail (engine linker): issues paged and filtered, one issue's full trail, the funnel numbers.
+// /api/issues?ward=&outcome=&q=&offset=&limit= (max 100) -> {total, items}; /api/linker?ward= (empty = city).
+app.get('/api/issues', (req, res) => res.json(issuesList(audit, req.query)));
+app.get('/api/issues/:id', (req, res) => res.json(issueDetail(audit, req.params.id)));
+app.get('/api/linker', (req, res) => res.json(linkerSummary(audit, req.query.ward)));
 
 // Compact per-day shape for the monsoon slider (see timeline.js), built once.
 const timeline = compactTimeline(audit);

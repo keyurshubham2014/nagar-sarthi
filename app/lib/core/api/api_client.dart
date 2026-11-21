@@ -161,6 +161,22 @@ class ApiClient {
     ),
   );
 
+  /// Complaint trail issues, most reported first: {total, items[]}. [outcome] is fixed_held, fixed_failed,
+  /// in_progress, never_fixed or social_only; [q] matches issue, complaint or work order id, place or road.
+  Future<Map<String, dynamic>> issues({String? ward, String? outcome, String? q, int offset = 0, int limit = 30}) => _call(
+    () => _dio.get(
+      '/api/issues',
+      queryParameters: {'ward': ?ward, 'outcome': ?outcome, 'q': ?q, 'offset': offset, 'limit': limit},
+    ),
+  );
+
+  /// One issue's full trail: complaints, social posts, work orders, outcome.
+  Future<Map<String, dynamic>> issue(String id) => _get('/api/issues/${Uri.encodeComponent(id)}');
+
+  /// Linker funnel for [ward] (null: all Mumbai), with the method notes and accuracy checks.
+  Future<Map<String, dynamic>> linker({String? ward}) =>
+      _call(() => _dio.get('/api/linker', queryParameters: {'ward': ?ward}));
+
   /// Citizen intake: {source, category, language, locality, ward_code, ward_name, match_count, matches[]}.
   Future<Map<String, dynamic>> intake(String text) =>
       _call(() => _dio.post('/api/claude/intake', data: {'text': text}));

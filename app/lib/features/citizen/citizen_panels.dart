@@ -14,6 +14,7 @@ import '../map/map_data.dart';
 import '../officer/officer_data.dart';
 import '../officer/officer_panels.dart';
 import '../officer/panel.dart';
+import '../trail/trail_screen.dart';
 
 // Citizen flow (TASK-06): raise, track, share, ask. Pages live in the shared panel host.
 
@@ -503,23 +504,39 @@ class ComplaintDetail extends ConsumerWidget {
     final matched = d['matched_complaint_id'] as String?;
     return PanelList(
       children: [
-        Text('${d['category']} · ${d['locality']} · Ward ${d['ward_code']}', style: t.titleSmall),
+        Text('${context.tr('${d['category']}')} · ${d['locality']} · Ward ${d['ward_code']}', style: t.titleSmall),
+        if (d['category_corrected'] == true)
+          Padding(
+            padding: const EdgeInsets.only(top: AppSpacing.s4),
+            child: Tag(context.tr('Reported as {a} → corrected to {b}', {'a': context.tr('${d['category']}'), 'b': context.tr('${d['category_clean']}')}),
+                bg: c.infoTint, fg: c.info, icon: Icons.edit_outlined),
+          ),
         const SizedBox(height: AppSpacing.s4),
         Text('“${d['description']}”', style: t.bodyMedium?.copyWith(fontStyle: FontStyle.italic)),
         const SizedBox(height: AppSpacing.s4),
         Align(alignment: Alignment.centerLeft, child: Tag(context.tr('Status: {s}', {'s': d['status']}), bg: c.infoTint, fg: c.info)),
         SectionTitle(context.tr('What happened')),
-        _Step(icon: Icons.inbox_outlined, color: c.info, title: context.tr('Received'), sub: _day(d['received_at'])),
+        TimelineStep(icon: Icons.inbox_outlined, color: c.info, title: context.tr('Received'), sub: _day(d['received_at'])),
+        if (d['issue_id'] case final String issue)
+          TimelineStep(
+            icon: Icons.account_tree_outlined,
+            color: c.info,
+            title: context.tr('Part of issue {id}', {'id': issue}),
+            sub: context.tr(d['link'] == 'inferred'
+                ? 'Grouped with reports of the same problem. Its work order is our best match (inferred link), not BMC’s record.'
+                : 'Grouped with other reports of the same problem.'),
+            action: TextButton(onPressed: () => openIssue(issue), child: Text(context.tr('See the full trail'))),
+          ),
         if (wo == null) ...[
           if (matched != null)
-            _Step(
+            TimelineStep(
               icon: Icons.group_add_outlined,
               color: c.info,
               title: context.tr('Added to complaint {id}', {'id': matched}),
               sub: context.tr('Follow that complaint for the repair.'),
               action: TextButton(onPressed: () => pushComplaint(context, matched), child: Text(context.tr('Track it'))),
             ),
-          _Step(
+          TimelineStep(
             icon: Icons.hourglass_empty,
             color: c.warning,
             title: context.tr(noWorkOrderOutcome(d['status'])),
@@ -527,20 +544,20 @@ class ComplaintDetail extends ConsumerWidget {
             last: true,
           ),
         ] else ...[
-          _Step(
+          TimelineStep(
             icon: Icons.assignment_outlined,
             color: c.info,
             title: context.tr('Linked to work order {id}', {'id': wo['id']}),
             sub: '${context.tr('Assigned {d}', {'d': _day(wo['assigned_at'])})} · ${wo['method']}\n'
                 '${_plain(wo['contractor_name'])} · ${formatInr(wo['cost_inr'] as num? ?? 0)}',
           ),
-          _Step(
+          TimelineStep(
             icon: wo['sla_met'] == true ? Icons.check_circle_outline : Icons.schedule,
             color: wo['sla_met'] == true ? c.success : c.warning,
             title: context.tr('Completed {d}', {'d': _day(wo['completed_at'])}),
             sub: context.tr(wo['sla_met'] == true ? 'On time against the SLA' : 'Late against the SLA'),
           ),
-          _Step(
+          TimelineStep(
             icon: wo['reopened'] == true ? Icons.report_problem_outlined : Icons.verified_outlined,
             color: wo['reopened'] == true ? c.error : c.success,
             title: context.tr(wo['reopened'] == true ? kFixFailed30 : kFixHeld),
@@ -560,8 +577,8 @@ class ComplaintDetail extends ConsumerWidget {
 }
 
 /// One step of the vertical timeline: dot, connector line, title and detail.
-class _Step extends StatelessWidget {
-  const _Step({required this.icon, required this.color, required this.title, required this.sub, this.last = false, this.action});
+class TimelineStep extends StatelessWidget {
+  const TimelineStep({super.key, required this.icon, required this.color, required this.title, required this.sub, this.last = false, this.action});
   final IconData icon;
   final Color color;
   final String title;

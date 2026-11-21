@@ -16,6 +16,7 @@ import 'features/officer/next_rupee.dart';
 import 'features/officer/officer_panels.dart';
 import 'features/officer/panel.dart';
 import 'features/shell/shell_scaffold.dart';
+import 'features/trail/trail_screen.dart';
 import 'features/ward/my_ward_screen.dart';
 
 final rootNavigatorKey = GlobalKey<NavigatorState>();
@@ -26,7 +27,7 @@ String? _q(GoRouterState s, String key) => s.uri.queryParameters[key];
 /// sit above the tabs on the root navigator, so back returns to the tab.
 ///   /  /map  /act (Report or Audit by role)  /contractors  /my-ward
 ///   /ward?code=  /road?id=&wo=  /contractor?id=&ward=  /complaint?id=  /track
-///   /next-rupee?ward=  /about  /sign-in  /page (any other detail page, passed as extra)
+///   /next-rupee?ward=  /trail?ward=  /issue?id=  /about  /sign-in  /page (any other detail page, passed as extra)
 final appRouter = GoRouter(
   navigatorKey: rootNavigatorKey,
   routes: [
@@ -67,6 +68,16 @@ final appRouter = GoRouter(
       path: '/next-rupee',
       redirect: (_, s) => _q(s, 'ward') == null ? '/' : null,
       builder: (_, s) => DetailPage(title: 'Next rupee · Ward ${_q(s, 'ward')}', body: NextRupeeList(_q(s, 'ward')!)),
+    ),
+    // Complaint trail: no ward opens on all Mumbai.
+    GoRoute(
+      path: '/trail',
+      builder: (_, s) => DetailPage(title: 'Complaint trail', subtitle: 'Complaint → issue → work order → outcome', body: TrailPage(ward: _q(s, 'ward'))),
+    ),
+    GoRoute(
+      path: '/issue',
+      redirect: (_, s) => _q(s, 'id') == null ? '/' : null,
+      builder: (_, s) => DetailPage(title: 'Issue ${_q(s, 'id')}', body: IssueDetail(_q(s, 'id')!)),
     ),
     // Detail pages that only make sense mid-flow; after a web reload (no extra) they go Home.
     GoRoute(

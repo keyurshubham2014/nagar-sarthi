@@ -352,6 +352,12 @@ export async function complaintDetail(audit, rawId) {
     ward_code: c.ward_code,
     description: c.description,
     language: c.language,
+    // Complaint trail: the engine's issue, clean category and whether the work-order link is recorded or inferred.
+    issue_id: c.issue_id ?? null,
+    category_clean: c.category_clean ?? null,
+    category_corrected: c.category_corrected ?? false,
+    scope: c.scope ?? null,
+    link: c.link ?? null,
     work_order: wo
       ? {
           id: wo.id,

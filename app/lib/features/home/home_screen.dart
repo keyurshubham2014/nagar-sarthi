@@ -22,6 +22,7 @@ import '../officer/next_rupee.dart';
 import '../officer/officer_data.dart';
 import '../officer/officer_panels.dart';
 import '../officer/panel.dart';
+import '../trail/trail_screen.dart';
 import '../ward/ward_picker.dart';
 
 const int _mapTab = 1;
@@ -308,6 +309,7 @@ class _OfficerHome extends ConsumerWidget {
           onTap: () => showNextRupee(ref, ward),
         ),
         NavCard(icon: Icons.account_balance_outlined, title: 'Ward $ward money trail', subtitle: 'Budget, flags by type, contractors, repair methods', onTap: () => openWard(ward)),
+        _trailCard(ward),
         const _DataLine(),
       ],
     );
@@ -347,11 +349,20 @@ class _CorporatorHome extends ConsumerWidget {
             ),
         const SectionHeading('Top items to look at'),
         _TopFlags(ward: ward),
+        const SizedBox(height: AppSpacing.s8),
+        _trailCard(ward),
         const _DataLine(),
       ],
     );
   }
 }
+
+Widget _trailCard(String ward) => NavCard(
+  icon: Icons.account_tree_outlined,
+  title: 'Complaint trail',
+  subtitle: 'Ward $ward: complaints → issues → work orders → what happened',
+  onTap: () => openTrail(ward),
+);
 
 /// Biggest money flags in the ward; each opens its road page on that work order.
 class _TopFlags extends ConsumerWidget {
