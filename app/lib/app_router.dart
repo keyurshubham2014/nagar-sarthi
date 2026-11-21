@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import 'core/auth/session.dart';
+import 'core/dev/gallery.dart';
 import 'core/flag_strings.dart';
 import 'features/about/about_screen.dart';
 import 'features/audit/audit_screen.dart';
@@ -32,8 +33,9 @@ String? _q(GoRouterState s, String key) => s.uri.queryParameters[key];
 final appRouter = GoRouter(
   navigatorKey: rootNavigatorKey,
   routes: [
-    StatefulShellRoute.indexedStack(
+    StatefulShellRoute(
       builder: (context, state, shell) => ShellScaffold(shell: shell),
+      navigatorContainerBuilder: ShellScaffold.branchContainer,
       branches: [
         StatefulShellBranch(routes: [GoRoute(path: '/', builder: (_, _) => const HomeScreen())]),
         StatefulShellBranch(routes: [GoRoute(path: '/map', builder: (_, _) => const MapScreen())]),
@@ -42,6 +44,8 @@ final appRouter = GoRouter(
         StatefulShellBranch(routes: [GoRoute(path: '/my-ward', builder: (_, _) => const MyWardScreen())]),
       ],
     ),
+    // Hidden dev page: every token and component (not linked from the app).
+    GoRoute(path: '/dev/gallery', builder: (_, _) => const GalleryScreen()),
     GoRoute(path: '/sign-in', builder: (_, _) => const SignInScreen()),
     GoRoute(path: '/about', builder: (_, _) => const AboutScreen()),
     GoRoute(
