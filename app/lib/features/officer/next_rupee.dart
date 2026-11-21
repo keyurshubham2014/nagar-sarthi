@@ -7,6 +7,7 @@ import '../../app_router.dart';
 import '../../core/flag_strings.dart';
 import '../../core/prefs.dart';
 import '../../core/format.dart';
+import '../../core/i18n.dart';
 import '../../core/map/civic_map.dart' show CivicMap, MapColors;
 import '../../core/widgets/ui.dart';
 import '../map/map_data.dart';
@@ -36,22 +37,44 @@ void showNextRupeeOnMap(WidgetRef ref, String ward) {
   appRouter.go('/map');
 }
 
-void _openItem(WidgetRef ref, String ward, Json item) => pushPanel(PanelPage(
-  '#${item['rank']} · ${item['issue']['category']}, ${item['issue']['locality']}',
+void _openItem(BuildContext context, WidgetRef ref, String ward, Json item) => pushPanel(PanelPage(
+  '#${item['rank']} · ${context.tr('${item['issue']['category']}')}, ${item['issue']['locality']}',
   NextRupeeDetail(item),
 ));
 
 /// Several items at one spot: one pin, tap opens a chooser listing them.
-void _openSpot(WidgetRef ref, String ward, List<Json> items) {
-  if (items.length == 1) return _openItem(ref, ward, items.single);
+void _openSpot(BuildContext context, WidgetRef ref, String ward, List<Json> items) {
+  if (items.length == 1) return _openItem(context, ref, ward, items.single);
   pushPanel(PanelPage(
-    '${items.length} items at this spot · Ward $ward',
+    '${context.tr('{n} items at this spot', {'n': items.length})} · ${context.tr('Ward {w}', {'w': ward})}',
     ListView(
       primary: true,
       padding: const EdgeInsets.only(bottom: AppSpacing.s32),
-      children: [const DetailTitle(), for (final i in items) _ItemRow(item: i, funded: i['funded'] == true, onTap: () => _openItem(ref, ward, i))],
+      children: [
+        const DetailTitle(),
+        for (final i in items) _ItemRow(item: i, funded: i['funded'] == true, onTap: () => _openItem(context, ref, ward, i)),
+      ],
     ),
   ));
+}
+
+/// The engine's reason lines for a next-rupee item, in the app language; place names stay as they are.
+String nextRupeeReason(BuildContext context, Object? reason) {
+  final r = '$reason';
+  for (final (re, key) in [
+    (RegExp(r'^Severity (\d+) of (\d+) for (.+)$'), 'Severity {a} of {b} for {c}'),
+    (RegExp(r'^Congestion index ([\d.]+) of (\d+)$'), 'Congestion index {a} of {b}'),
+    (RegExp(r'^(\d+) recorded accidents? on this road$'), '{a} recorded accidents on this road'),
+    (RegExp(r'^Near hospital: (.+)$'), 'Near hospital: {a}'),
+    (RegExp(r'^Near school: (.+)$'), 'Near school: {a}'),
+    (RegExp(r'^Flood hotspot: (.+)$'), 'Flood hotspot: {a}'),
+  ]) {
+    final m = re.firstMatch(r);
+    if (m != null) {
+      return context.tr(key, {'a': m[1], 'b': m.groupCount > 1 ? m[2] : '', 'c': m.groupCount > 2 ? context.tr(m[3]!) : ''});
+    }
+  }
+  return context.tr(r);
 }
 
 LatLng? _ll(Map m) =>
@@ -111,7 +134,8 @@ class NextRupeeLayer extends ConsumerWidget {
     if (nr == null) return const SizedBox.shrink();
     final camera = MapCamera.of(context);
 
-    Marker place(Map m, IconData icon, Color color, String what) {
+    Marker place(Map m, IconData icon, Color color, String kind) {
+      final what = context.tr(kind);
       return Marker(
         point: _ll(m)!,
         width: 22,
@@ -158,10 +182,10 @@ class NextRupeeLayer extends ConsumerWidget {
             child: Semantics(
               button: true,
               label: group.length == 1
-                  ? 'Next rupee rank ${group.first['rank']}: ${group.first['issue']['category']}'
-                  : '${group.length} next rupee items here, ranks ${group.map((i) => i['rank']).join(', ')}',
+                  ? context.tr('Next rupee rank {n}: {what}', {'n': group.first['rank'], 'what': context.tr('${group.first['issue']['category']}')})
+                  : context.tr('{n} next rupee items here, ranks {ranks}', {'n': group.length, 'ranks': group.map((i) => i['rank']).join(', ')}),
               child: GestureDetector(
-                onTap: () => _openSpot(ref, ward, group),
+                onTap: () => _openSpot(context, ref, ward, group),
                 child: RankPin(rank: group.first['rank'], funded: group.any((i) => i['funded'] == true), more: group.length - 1),
               ),
             ),
@@ -183,7 +207,7 @@ class NextRupeeList extends ConsumerWidget {
     data: (nr) {
       final items = [for (final i in (nr['items'] as List? ?? const [])) i as Json]
         ..sort((a, b) => (a['rank'] as num).compareTo(b['rank'] as num));
-      if (items.isEmpty) return const PanelMessage.empty('No open issues waiting for repair in this ward.');
+      if (items.isEmpty) return PanelMessage.empty(context.tr('No open issues waiting for repair in this ward.'));
       return _Planner(ward: ward, items: items, base: nr['remaining_budget'] as num? ?? 0);
     },
   );
@@ -249,31 +273,35 @@ class _PlannerState extends ConsumerState<_Planner> {
   // Quick amounts: percentages of the budget left, or fixed steps when nothing is left.
   List<(String, double)> get _quick {
     final b = widget.base.toDouble();
-    if (b <= 0) return [('Current ₹0', 0), ('+₹1 L', 1e5), ('+₹2.5 L', 2.5e5), ('+₹5 L', 5e5)];
-    return [('−25%', b * 0.75), ('Now', b), ('+25%', b * 1.25), ('+50%', b * 1.5)];
+    if (b <= 0) return [(context.tr('Current ₹0'), 0), ('+₹1 L', 1e5), ('+₹2.5 L', 2.5e5), ('+₹5 L', 5e5)];
+    return [('−25%', b * 0.75), (context.tr('Now'), b), ('+25%', b * 1.25), ('+50%', b * 1.5)];
   }
 
   String _near(Iterable<Json> xs) {
     final h = xs.where((i) => (i['reasons'] as List? ?? const []).any((r) => '$r'.startsWith('Near hospital'))).length;
     final s = xs.where((i) => (i['reasons'] as List? ?? const []).any((r) => '$r'.startsWith('Near school'))).length;
-    final parts = [if (h > 0) '$h near a hospital', if (s > 0) '$s near a school'];
-    return parts.isEmpty ? '' : ', including ${parts.join(' and ')}';
+    final parts = [if (h > 0) context.tr('{n} near a hospital', {'n': h}), if (s > 0) context.tr('{n} near a school', {'n': s})];
+    return parts.isEmpty ? '' : context.tr(', including {parts}', {'parts': parts.join(context.tr(' and '))});
   }
 
   /// One line: what the change from the current budget buys or drops.
   String _summary(List<bool> funded) {
     final items = widget.items;
     final delta = _budget - widget.base;
-    if (delta.abs() < 1) return 'This is the budget left now.';
+    if (delta.abs() < 1) return context.tr('This is the budget left now.');
     final added = [for (final (k, i) in items.indexed) if (funded[k] && !_baseFunded[k]) i];
     final dropped = [for (final (k, i) in items.indexed) if (!funded[k] && _baseFunded[k]) i];
     final d = '${delta > 0 ? '+' : '−'}${formatInr(delta.abs())}';
-    if (added.isNotEmpty) return '$d funds ${added.length} more ${added.length == 1 ? 'item' : 'items'}${_near(added)}.';
-    if (dropped.isNotEmpty) return '$d drops ${dropped.length} ${dropped.length == 1 ? 'item' : 'items'}${_near(dropped)}.';
+    if (added.isNotEmpty) {
+      return context.tr(added.length == 1 ? '{d} funds 1 more item{near}.' : '{d} funds {n} more items{near}.', {'d': d, 'n': added.length, 'near': _near(added)});
+    }
+    if (dropped.isNotEmpty) {
+      return context.tr(dropped.length == 1 ? '{d} drops 1 item{near}.' : '{d} drops {n} items{near}.', {'d': d, 'n': dropped.length, 'near': _near(dropped)});
+    }
     final next = funded.indexOf(false);
-    if (next < 0) return '$d changes nothing: every item is already funded.';
+    if (next < 0) return context.tr('{d} changes nothing: every item is already funded.', {'d': d});
     final needed = items.take(next + 1).fold<double>(0, (s, i) => s + _cost(i)) - _budget;
-    return '$d funds no more items: the next one needs ${formatInr(needed)} more.';
+    return context.tr('{d} funds no more items: the next one needs {amount} more.', {'d': d, 'amount': formatInr(needed)});
   }
 
   @override
@@ -288,13 +316,18 @@ class _PlannerState extends ConsumerState<_Planner> {
     final max = (([widget.base * 2, total, 1e5].reduce((a, b) => a > b ? a : b)) / 1e5).ceil() * 1e5;
     final cut = funded.indexOf(false); // first item below the funding line (-1: all funded)
     final changed = (_budget - widget.base).abs() >= 1;
-    final counts = '${funded.where((f) => f).length} of ${items.length} items funded · ${formatInr(used)} used · ${formatInr(_budget - used)} left';
+    final counts = context.tr('{n} of {total} items funded · {used} used · {left} left', {
+      'n': funded.where((f) => f).length,
+      'total': items.length,
+      'used': formatInr(used),
+      'left': formatInr(_budget - used),
+    });
     final summary = _summary(funded);
 
     return Scaffold(
       backgroundColor: c.background,
       bottomNavigationBar: BottomActionBar(
-        child: PrimaryButton(label: 'Show the pins on the map', icon: Icons.map_outlined, onPressed: () => showNextRupeeOnMap(ref, widget.ward)),
+        child: PrimaryButton(label: context.tr('Show the pins on the map'), icon: Icons.map_outlined, onPressed: () => showNextRupeeOnMap(ref, widget.ward)),
       ),
       body: Center(
         child: ConstrainedBox(
@@ -303,7 +336,11 @@ class _PlannerState extends ConsumerState<_Planner> {
             primary: true,
             padding: const EdgeInsets.only(bottom: AppSpacing.s32),
             children: [
-              PageTitle(kNextRupeeAction, caption: 'Ward ${widget.ward} · ranked by need, safety first', detail: true),
+              PageTitle(
+                context.tr(kNextRupeeAction),
+                caption: '${context.tr('Ward {w}', {'w': widget.ward})} · ${context.tr('ranked by need, safety first')}',
+                detail: true,
+              ),
               const SizedBox(height: AppSpacing.s16),
               Gutter(
                 child: Column(
@@ -311,7 +348,7 @@ class _PlannerState extends ConsumerState<_Planner> {
                   children: [
                     Row(
                       children: [
-                        Expanded(child: Text('Budget to plan with', style: t.label.copyWith(color: c.textSecondary))),
+                        Expanded(child: Text(context.tr('Budget to plan with'), style: t.label.copyWith(color: c.textSecondary))),
                         if (changed)
                           TextButton.icon(
                             onPressed: () {
@@ -319,7 +356,7 @@ class _PlannerState extends ConsumerState<_Planner> {
                               _set(widget.base.toDouble());
                             },
                             icon: const Icon(Icons.restart_alt),
-                            label: const Text('Reset'),
+                            label: Text(context.tr('Reset')),
                           ),
                       ],
                     ),
@@ -328,7 +365,7 @@ class _PlannerState extends ConsumerState<_Planner> {
                       alignment: AlignmentDirectional.centerStart,
                       child: AnimatedCount(value: _budget, format: formatInr, style: t.figureXL),
                     ),
-                    Text('Budget left now: ${formatInr(widget.base)}', style: t.caption),
+                    Text(context.tr('Budget left now: {amount}', {'amount': formatInr(widget.base)}), style: t.caption),
                   ],
                 ),
               ),
@@ -367,7 +404,7 @@ class _PlannerState extends ConsumerState<_Planner> {
                   controller: _typed,
                   keyboardType: const TextInputType.numberWithOptions(decimal: true),
                   textInputAction: TextInputAction.done,
-                  decoration: const InputDecoration(hintText: 'Type an amount, e.g. 7.5', suffixText: 'lakh ₹'),
+                  decoration: InputDecoration(hintText: context.tr('Type an amount, e.g. 7.5'), suffixText: context.tr('lakh ₹')),
                   onChanged: (s) {
                     final v = double.tryParse(s.trim());
                     if (v != null) _set(v * 1e5);
@@ -393,19 +430,21 @@ class _PlannerState extends ConsumerState<_Planner> {
               const SectionBreak(space: AppSpacing.s32),
               Gutter(
                 child: Text(
-                  'Ranked by need: severity, nearby hospitals and schools, accidents, flooding and traffic. '
-                  'The ranks never change with the budget; only the funding line moves. Tap an item for its score.',
+                  context.tr(
+                    'Ranked by need: severity, nearby hospitals and schools, accidents, flooding and traffic. '
+                    'The ranks never change with the budget; only the funding line moves. Tap an item for its score.',
+                  ),
                   style: t.caption,
                 ),
               ),
               const SizedBox(height: AppSpacing.s8),
               if (cut == 0)
-                const Padding(
-                  padding: EdgeInsets.symmetric(horizontal: AppSpacing.gutter, vertical: AppSpacing.s8),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: AppSpacing.gutter, vertical: AppSpacing.s8),
                   child: InfoPanel(
                     icon: Icons.info_outline,
                     tone: StatusTone.warning,
-                    text: 'At this budget nothing can be funded yet, except work under warranty.',
+                    text: context.tr('At this budget nothing can be funded yet, except work under warranty.'),
                   ),
                 ),
               for (var k = 0; k < items.length; k++)
@@ -427,7 +466,7 @@ class _PlannerState extends ConsumerState<_Planner> {
                         child: _ItemRow(
                           item: items[k],
                           funded: funded[k],
-                          onTap: () => _openItem(ref, widget.ward, {...items[k], 'funded': funded[k]}),
+                          onTap: () => _openItem(context, ref, widget.ward, {...items[k], 'funded': funded[k]}),
                         ),
                       ),
                     ),
@@ -453,7 +492,7 @@ class _FundingLine extends StatelessWidget {
           Expanded(child: Divider(color: c.error, thickness: 2)),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: AppSpacing.s8),
-            child: Text(kBudgetEnds, style: context.type.label.copyWith(color: c.error, fontWeight: FontWeight.w700)),
+            child: Text(context.tr(kBudgetEnds), style: context.type.label.copyWith(color: c.error, fontWeight: FontWeight.w700)),
           ),
           Expanded(child: Divider(color: c.error, thickness: 2)),
         ],
@@ -485,7 +524,7 @@ class _ItemRow extends StatelessWidget {
     final factors = _factors(item);
     final warranty = item['claim_under_dlp'] == true;
     return Semantics(
-      label: funded ? 'Funded' : 'Beyond the budget',
+      label: context.tr(funded ? 'Funded' : 'Beyond the budget'),
       child: ListRow(
         leading: Container(
           width: 40,
@@ -494,16 +533,16 @@ class _ItemRow extends StatelessWidget {
           decoration: BoxDecoration(color: c.primary, shape: BoxShape.circle),
           child: Text('${item['rank']}', style: context.type.label.copyWith(color: c.onPrimary, fontWeight: FontWeight.w700)),
         ),
-        title: '${issue['category']} · ${issue['locality']}',
-        caption: 'Score ${item['score']}',
+        title: '${context.tr('${issue['category']}')} · ${issue['locality']}',
+        caption: context.tr('Score {n}', {'n': item['score']}),
         chip: factors.isEmpty && !warranty
             ? null
             : Wrap(
                 spacing: AppSpacing.s4,
                 runSpacing: AppSpacing.s4,
                 children: [
-                  if (warranty) Tag(kWarrantyClaimTag, bg: c.infoTint, fg: c.info, icon: Icons.verified_user_outlined),
-                  for (final (label, icon) in factors) Tag(label, bg: c.surfaceAlt, fg: c.textPrimary, icon: icon),
+                  if (warranty) Tag(context.tr(kWarrantyClaimTag), bg: c.infoTint, fg: c.info, icon: Icons.verified_user_outlined),
+                  for (final (label, icon) in factors) Tag(context.tr(label), bg: c.surfaceAlt, fg: c.textPrimary, icon: icon),
                 ],
               ),
         amount: formatInr(item['cost_to_ward_inr'] as num? ?? 0),
@@ -537,14 +576,17 @@ class NextRupeeDetail extends ConsumerWidget {
       children: [
         Align(
           alignment: AlignmentDirectional.centerStart,
-          child: StatusChip(funded ? 'Within budget' : 'Beyond the budget', tone: funded ? StatusTone.success : StatusTone.neutral, dot: true),
+          child: StatusChip(context.tr(funded ? 'Within budget' : 'Beyond the budget'), tone: funded ? StatusTone.success : StatusTone.neutral, dot: true),
         ),
         const SizedBox(height: AppSpacing.s16),
         HeroFigure(
-          caption: 'Need score',
+          caption: context.tr('Need score'),
           value: item['score'] as num? ?? 0,
-          format: (v) => '${_score(v)} of 100',
-          explanation: 'Complaints: ${(issue['complaint_ids'] as List? ?? const []).join(', ')} · ${issue['upvotes'] ?? 0} upvotes',
+          format: (v) => context.tr('{n} of 100', {'n': _score(v)}),
+          explanation: context.tr('Complaints: {ids} · {n} upvotes', {
+            'ids': (issue['complaint_ids'] as List? ?? const []).join(', '),
+            'n': issue['upvotes'] ?? 0,
+          }),
         ),
         if (_ll(item) case final at?) ...[
           const SizedBox(height: AppSpacing.s16),
@@ -554,7 +596,7 @@ class NextRupeeDetail extends ConsumerWidget {
               height: 180,
               child: IgnorePointer(
                 child: CivicMap(
-                  semanticLabel: 'Map of ${issue['locality']} with this item\'s pin',
+                  semanticLabel: context.tr('Map of {place} with this item’s pin', {'place': issue['locality']}),
                   center: at,
                   initialZoom: 15.5,
                   interactive: false,
@@ -576,12 +618,12 @@ class NextRupeeDetail extends ConsumerWidget {
             ),
           ),
         ],
-        const SectionTitle('Score breakdown'),
+        SectionTitle(context.tr('Score breakdown')),
         for (final (i, e) in scorePartLabels.entries.indexed)
           StaggeredEntrance(
             index: i,
             child: LabelledBar(
-              label: '${e.value} · weight ${weights[e.key] ?? 0}',
+              label: '${context.tr(e.value)} · ${context.tr('weight {n}', {'n': weights[e.key] ?? 0})}',
               value: parts[e.key] as num? ?? 0,
               max: weights[e.key] as num? ?? 0,
               trailing: '${_score(parts[e.key] as num? ?? 0)} / ${weights[e.key] ?? 0}',
@@ -590,27 +632,32 @@ class NextRupeeDetail extends ConsumerWidget {
         const SizedBox(height: AppSpacing.s24),
         InfoPanel(
           icon: Icons.handyman_outlined,
-          title: 'Recommended repair',
+          title: context.tr('Recommended repair'),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const SizedBox(height: AppSpacing.s4),
-              Text('${item['recommended_method']}', style: t.body),
-              Text('Re-opens ${formatPercent(item['method_reopen_rate'] as num? ?? 0)} of the time in this season’s data',
+              Text(context.tr('${item['recommended_method']}'), style: t.body),
+              Text(context.tr('Re-opens {p} of the time in this season’s data', {'p': formatPercent(item['method_reopen_rate'] as num? ?? 0)}),
                   style: t.caption.copyWith(fontSize: 14, height: 20 / 14)),
               const SizedBox(height: AppSpacing.s8),
               EvidenceTable({
-                'Estimated cost': formatInr(item['est_cost_inr'] as num? ?? 0),
-                'Cost to ward': formatInr(item['cost_to_ward_inr'] as num? ?? 0),
+                context.tr('Estimated cost'): formatInr(item['est_cost_inr'] as num? ?? 0),
+                context.tr('Cost to ward'): formatInr(item['cost_to_ward_inr'] as num? ?? 0),
               }),
             ],
           ),
         ),
         if (item['claim_under_dlp'] == true) ...[
           const SizedBox(height: AppSpacing.s12),
-          const InfoPanel(icon: Icons.verified_user_outlined, tone: StatusTone.info, title: kUnderWarranty, text: kWarrantyClaimTag),
+          InfoPanel(
+            icon: Icons.verified_user_outlined,
+            tone: StatusTone.info,
+            title: context.tr(kUnderWarranty),
+            text: context.tr(kWarrantyClaimTag),
+          ),
         ],
-        const SectionTitle('Reasons'),
+        SectionTitle(context.tr('Reasons')),
         for (final r in (item['reasons'] as List? ?? const []))
           Padding(
             padding: const EdgeInsets.only(bottom: AppSpacing.s8),
@@ -621,7 +668,7 @@ class NextRupeeDetail extends ConsumerWidget {
                   padding: const EdgeInsets.only(top: AppSpacing.s8, right: AppSpacing.s12),
                   child: Container(width: 6, height: 6, decoration: BoxDecoration(color: c.textPrimary, shape: BoxShape.circle)),
                 ),
-                Expanded(child: Text('$r', style: t.body)),
+                Expanded(child: Text(nextRupeeReason(context, r), style: t.body)),
               ],
             ),
           ),

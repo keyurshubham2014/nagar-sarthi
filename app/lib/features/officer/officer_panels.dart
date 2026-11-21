@@ -29,11 +29,11 @@ void openRoad(String id, {String? wo}) => appRouter.push(Uri(path: '/road', quer
 /// Recovery notice for one flag type on a road or across a ward. The server
 /// picks the flag rows; the client sends only the scope.
 Future<void> showNoticeSheet(BuildContext context, {required String type, String? roadId, String? wardCode}) async {
-  const why = 'Recovery notices are drafted by the ward officer. Sign in as a ward officer to draft one.';
+  final why = context.tr('Recovery notices are drafted by the ward officer. Sign in as a ward officer to draft one.');
   if (!await ensureRole(context, roles: {'officer'}, why: why) || !context.mounted) return;
   await showClaudeDraftSheet(
     context,
-    title: 'Recovery notice',
+    title: context.tr('Recovery notice'),
     feature: 'notice',
     body: {'flag_type': type, 'road_id': ?roadId, 'ward_code': ?wardCode},
   );
@@ -91,12 +91,17 @@ Future<void> _draftNotice(BuildContext context, List<String> types, {String? roa
       ? types.single
       : await showAppSheet<String>(
           context,
-          title: kDraftNotice,
+          title: context.tr(kDraftNotice),
           builder: (sheet) => Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               for (final k in types)
-                ListRow(leading: _flagWell(sheet, k), title: flagLabel(k), caption: flagStanding(k), onTap: () => Navigator.pop(sheet, k)),
+                ListRow(
+                  leading: _flagWell(sheet, k),
+                  title: sheet.tr(flagLabel(k)),
+                  caption: sheet.tr(flagStanding(k)),
+                  onTap: () => Navigator.pop(sheet, k),
+                ),
             ],
           ),
         );
@@ -133,7 +138,7 @@ class WardPanel extends ConsumerWidget {
             ...switch (v) {
               AsyncData(:final value) => _body(context, ref, value),
               AsyncError(:final error) => [
-                ErrorState(message: 'Could not load this ward.\n$error', onRetry: () => ref.invalidate(wardDetailProvider(code))),
+                ErrorState(message: '${context.tr('Could not load this ward.')}\n$error', onRetry: () => ref.invalidate(wardDetailProvider(code))),
               ],
               _ => [
                 Gutter(
@@ -191,22 +196,23 @@ class WardPanel extends ConsumerWidget {
     final maxM = methods.isEmpty ? 1 : methods.first['inr'] as num;
     final neverFixed = (w['never_fixed'] as List? ?? const []).length;
 
+    final inWard = context.tr('Ward {w}', {'w': code});
     // (label, pictogram or art, tap)
     final toolList = <(String, PictogramKind?, Widget?, VoidCallback)>[
-      (kWardBrief, PictogramKind.brief, null, () => showWardBrief(context, code)),
+      (context.tr(kWardBrief), PictogramKind.brief, null, () => showWardBrief(context, code)),
       (context.tr(kReportCard), PictogramKind.reportCard, null, () => pushPanel(PanelPage(kReportCard, ReportCardPage(ward: code)))),
       (context.tr(kAskWard), PictogramKind.ask, null, () => pushPanel(PanelPage(kAskWard, AskWardPage(ward: code)))),
-      ('Complaint trail', PictogramKind.trail, null, () => openTrail(code)),
-      if (role != 'citizen') ('Next rupee', PictogramKind.nextRupee, null, () => showNextRupee(ref, code)),
+      (context.tr('Complaint trail'), PictogramKind.trail, null, () => openTrail(code)),
+      if (role != 'citizen') (context.tr('Next rupee'), PictogramKind.nextRupee, null, () => showNextRupee(ref, code)),
       (
-        kContractorsInWard,
+        context.tr(kContractorsInWard),
         PictogramKind.contractors,
         null,
-        () => pushPanel(PanelPage('$kContractorsInWard · Ward $code', ScorecardList(ward: code))),
+        () => pushPanel(PanelPage('${context.tr(kContractorsInWard)} · $inWard', ScorecardList(ward: code))),
       ),
       if (noticeTypes.isNotEmpty && canDraftNotice(role))
         (
-          kDraftNotice,
+          context.tr(kDraftNotice),
           null,
           const Icon(Icons.edit_note, size: AppSpacing.pictogram),
           () => _draftNotice(context, noticeTypes, wardCode: code),
@@ -222,11 +228,17 @@ class WardPanel extends ConsumerWidget {
     return [
       Gutter(
         child: HeroFigure(
-          caption: 'Spent of ${formatInr(budget)} budget',
+          caption: context.tr('Spent of {budget} budget', {'budget': formatInr(budget)}),
           value: spend,
           format: formatInr,
-          explanation: remaining < 0 ? 'Over budget by ${formatInr(-remaining)}' : '${formatInr(remaining)} left this season',
-          action: ProgressBar(value: budget <= 0 ? 1 : (spend / budget).toDouble(), height: 8, semanticLabel: 'Spend against budget'),
+          explanation: remaining < 0
+              ? context.tr('Over budget by {amount}', {'amount': formatInr(-remaining)})
+              : context.tr('{amount} left this season', {'amount': formatInr(remaining)}),
+          action: ProgressBar(
+            value: budget <= 0 ? 1 : (spend / budget).toDouble(),
+            height: 8,
+            semanticLabel: context.tr('Spend against budget'),
+          ),
         ),
       ),
       const SectionBreak(space: AppSpacing.s32),
@@ -234,9 +246,9 @@ class WardPanel extends ConsumerWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Semantics(header: true, child: Text('To review: ${formatInr(w['flagged_inr'] as num? ?? 0)}', style: t.headline)),
+            Semantics(header: true, child: Text(context.tr('To review: {amount}', {'amount': formatInr(w['flagged_inr'] as num? ?? 0)}), style: t.headline)),
             const SizedBox(height: AppSpacing.s4),
-            Text('${formatPercent(w['flagged_share'] as num? ?? 0)} of spend in this ward needs review', style: t.caption),
+            Text(context.tr('{p} of spend in this ward needs review', {'p': formatPercent(w['flagged_share'] as num? ?? 0)}), style: t.caption),
             if (moneyTypes.isNotEmpty) ...[
               const SizedBox(height: AppSpacing.s16),
               _StackedBar([for (final k in moneyTypes) (flagToneColor(context, k), inr(k))]),
@@ -246,32 +258,32 @@ class WardPanel extends ConsumerWidget {
       ),
       const SizedBox(height: AppSpacing.s8),
       if (types.isEmpty)
-        const Gutter(
-          child: InfoPanel(icon: Icons.verified_outlined, tone: StatusTone.success, text: 'No flags in this ward.'),
+        Gutter(
+          child: InfoPanel(icon: Icons.verified_outlined, tone: StatusTone.success, text: context.tr('No flags in this ward.')),
         ),
       for (final (i, type) in types.indexed)
         StaggeredEntrance(
           index: i,
           child: ListRow(
             leading: _flagWell(context, type),
-            title: flagLabel(type),
-            caption: type == 'sla_missed' ? '${count(type)} jobs · $kSlaNoMoney' : '${count(type)} jobs · ${flagStanding(type)}',
+            title: context.tr(flagLabel(type)),
+            caption: '${context.tr('{n} jobs', {'n': count(type)})} · ${context.tr(type == 'sla_missed' ? kSlaNoMoney : flagStanding(type))}',
             amount: type == 'sla_missed' ? null : formatInr(inr(type)),
             divider: i < types.length - 1,
-            onTap: () => pushPanel(PanelPage('${flagLabel(type)} · Ward $code', AuditList(ward: code, type: type, allowAllMumbai: false))),
+            onTap: () => pushPanel(PanelPage('${context.tr(flagLabel(type))} · $inWard', AuditList(ward: code, type: type, allowAllMumbai: false))),
           ),
         ),
-      if (types.isNotEmpty) Gutter(child: Text(kFlagsOverlap, style: t.caption)),
+      if (types.isNotEmpty) Gutter(child: Text(context.tr(kFlagsOverlap), style: t.caption)),
       const SectionBreak(space: AppSpacing.s32),
       // One set of tools; the brief comes first for everyone.
-      Gutter(child: _heading(context, role == 'corporator' ? 'Your tools' : 'More about this ward')),
+      Gutter(child: _heading(context, context.tr(role == 'corporator' ? 'Your tools' : 'More about this ward'))),
       Gutter(child: TileGrid(tiles: tools, squareColumns: 3)),
       if (neverFixed > 0) ...[
         const SizedBox(height: AppSpacing.s12),
         ListRow(
           icon: Icons.report_outlined,
-          title: '$neverFixed complaints never fixed',
-          caption: 'Open the complaint trail for this ward',
+          title: context.tr('{n} complaints never fixed', {'n': neverFixed}),
+          caption: context.tr('Open the complaint trail for this ward'),
           divider: false,
           onTap: () => openTrail(code),
         ),
@@ -281,21 +293,21 @@ class WardPanel extends ConsumerWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _heading(context, 'Top contractors by spend'),
-            if (contractors.isEmpty) Text('No work orders in this ward.', style: t.caption),
+            _heading(context, context.tr('Top contractors by spend')),
+            if (contractors.isEmpty) Text(context.tr('No work orders in this ward.'), style: t.caption),
             for (final k in contractors)
               LabelledBar(
-                label: '${'${k['name']}'.replaceAll(' (synthetic)', '')} · ${k['jobs']} jobs',
+                label: '${'${k['name']}'.replaceAll(' (synthetic)', '')} · ${context.tr('{n} jobs', {'n': k['jobs']})}',
                 value: k['inr'] as num,
                 max: maxC,
                 trailing: formatInr(k['inr'] as num),
               ),
             const SizedBox(height: AppSpacing.s32),
-            _heading(context, 'Repair methods by spend'),
-            if (methods.isEmpty) Text('No work orders in this ward.', style: t.caption),
+            _heading(context, context.tr('Repair methods by spend')),
+            if (methods.isEmpty) Text(context.tr('No work orders in this ward.'), style: t.caption),
             for (final m in methods)
               LabelledBar(
-                label: '${m['method']} · ${m['jobs']} jobs',
+                label: '${context.tr('${m['method']}')} · ${context.tr('{n} jobs', {'n': m['jobs']})}',
                 value: m['inr'] as num,
                 max: maxM,
                 trailing: formatInr(m['inr'] as num),
@@ -367,7 +379,7 @@ class RoadPanel extends ConsumerWidget {
     }
 
     if (road.hasError || flags.hasError) {
-      return PanelMessage.error('Could not load this road.\n${road.error ?? flags.error}', onRetry: retry);
+      return PanelMessage.error('${context.tr('Could not load this road.')}\n${road.error ?? flags.error}', onRetry: retry);
     }
     if (!road.hasValue || !flags.hasValue) return const PanelMessage.loading();
     final r = road.requireValue;
@@ -384,7 +396,7 @@ class RoadPanel extends ConsumerWidget {
           ? null
           : BottomActionBar(
               child: PrimaryButton(
-                label: kDraftNotice,
+                label: context.tr(kDraftNotice),
                 icon: Icons.edit_note,
                 onPressed: () => _draftNotice(context, noticeTypes, roadId: id),
               ),
@@ -432,10 +444,10 @@ class _RoadBody extends StatelessWidget {
                 runSpacing: AppSpacing.s8,
                 children: [
                   if (status == 'clean' && flags.any((f) => f['type'] == 'sla_missed'))
-                    const StatusChip(kSlowerSomeJobs, tone: StatusTone.warning, dot: true)
+                    StatusChip(context.tr(kSlowerSomeJobs), tone: StatusTone.warning, dot: true)
                   else
-                    StatusChip(roadStatusLabels[status] ?? status, tone: flagTone(status), dot: true),
-                  StatusChip('Ward ${r['ward_code']} · ${r['road_type'] ?? ''}'),
+                    StatusChip(context.tr(roadStatusLabels[status] ?? status), tone: flagTone(status), dot: true),
+                  StatusChip('${context.tr('Ward {w}', {'w': r['ward_code']})} · ${context.tr('${r['road_type'] ?? ''}')}'),
                 ],
               ),
             ),
@@ -445,9 +457,11 @@ class _RoadBody extends StatelessWidget {
                 child: InfoPanel(
                   icon: Icons.verified_user_outlined,
                   tone: StatusTone.info,
-                  text:
-                      'Under contractor warranty.${resurfaced == null ? '' : ' Resurfaced ${_day(resurfaced)}.'} '
-                      'Repairs in this period are to be claimed and verified.',
+                  text: [
+                    context.tr('Under contractor warranty.'),
+                    if (resurfaced != null) context.tr('Resurfaced {d}.', {'d': _day(resurfaced)}),
+                    context.tr('Repairs in this period are to be claimed and verified.'),
+                  ].join(' '),
                 ),
               ),
             ],
@@ -455,16 +469,21 @@ class _RoadBody extends StatelessWidget {
             Gutter(
               child: StatRow(
                 tiles: [
-                  StatTile.count(count: r['spend'] as num? ?? 0, format: formatInr, label: 'spent'),
-                  StatTile.count(count: wos.length, label: wos.length == 1 ? 'job' : 'jobs'),
-                  StatTile.count(count: failed, label: 'failed', color: failed > 0 ? c.error : null, dot: failed > 0 ? c.error : null),
+                  StatTile.count(count: r['spend'] as num? ?? 0, format: formatInr, label: context.tr('spent')),
+                  StatTile.count(count: wos.length, label: context.tr(wos.length == 1 ? 'job' : 'jobs')),
+                  StatTile.count(
+                    count: failed,
+                    label: context.tr('failed'),
+                    color: failed > 0 ? c.error : null,
+                    dot: failed > 0 ? c.error : null,
+                  ),
                 ],
               ),
             ),
             const SectionBreak(space: AppSpacing.s32),
-            Gutter(child: _heading(context, 'Work orders')),
+            Gutter(child: _heading(context, context.tr('Work orders'))),
             if (wos.isEmpty)
-              const EmptyState(message: 'No work orders on this road.', pictogram: PictogramKind.pothole)
+              EmptyState(message: context.tr('No work orders on this road.'), pictogram: PictogramKind.pothole)
             else
               Gutter(
                 child: Timeline(
@@ -477,14 +496,14 @@ class _RoadBody extends StatelessWidget {
                         ];
                         return TimelineStep(
                           title: '${wo['id']} · ${'${wo['contractor_name']}'.replaceAll(' (synthetic)', '')}',
-                          meta: '${_day(wo['assigned_at'])} · ${wo['method']}',
+                          meta: '${_day(wo['assigned_at'])} · ${context.tr('${wo['method']}')}',
                           amount: formatInr(wo['cost_inr'] as num? ?? 0),
                           state: TimelineNodeState.outcome,
                           color: types.isEmpty ? c.success : flagToneColor(context, types.first),
                           chip: types.isEmpty
-                              ? const StatusChip(kNoFlags, tone: StatusTone.success)
+                              ? StatusChip(context.tr(kNoFlags), tone: StatusTone.success)
                               : StatusChip(
-                                  flagShortLabels[types.first] ?? types.first,
+                                  context.tr(flagShortLabels[types.first] ?? types.first),
                                   tone: flagTone(types.first),
                                   more: types.length - 1,
                                 ),
@@ -496,7 +515,7 @@ class _RoadBody extends StatelessWidget {
               ),
             Padding(
               padding: const EdgeInsets.fromLTRB(AppSpacing.gutter, AppSpacing.s16, AppSpacing.gutter, 0),
-              child: Text(kFlagsOverlap, style: t.caption),
+              child: Text(context.tr(kFlagsOverlap), style: t.caption),
             ),
           ],
         ),
@@ -558,13 +577,13 @@ class _EvidenceState extends State<_Evidence> {
           onTap: () => setState(() => _open = !_open),
           scale: false,
           borderRadius: AppRadii.pillRadius,
-          semanticLabel: _open ? 'Hide evidence for ${wo['id']}' : 'Show evidence for ${wo['id']}',
+          semanticLabel: context.tr(_open ? 'Hide evidence for {id}' : 'Show evidence for {id}', {'id': wo['id']}),
           child: ConstrainedBox(
             constraints: const BoxConstraints(minHeight: AppSpacing.touchTarget),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text(_open ? 'Hide evidence' : 'Show evidence', style: t.label.copyWith(fontWeight: FontWeight.w700)),
+                Text(context.tr(_open ? 'Hide evidence' : 'Show evidence'), style: t.label.copyWith(fontWeight: FontWeight.w700)),
                 AnimatedRotation(
                   turns: _open ? 0.5 : 0,
                   duration: AppMotion.of(context, AppMotion.quick),
@@ -603,22 +622,22 @@ class _EvidenceState extends State<_Evidence> {
                             _flagWellSmall(context, type),
                             const SizedBox(width: AppSpacing.s8),
                             Expanded(
-                              child: Text(flagLabel(type), style: t.label.copyWith(fontWeight: FontWeight.w700)),
+                              child: Text(context.tr(flagLabel(type)), style: t.label.copyWith(fontWeight: FontWeight.w700)),
                             ),
                           ],
                         ),
-                        Text(flagStanding(type), style: t.caption),
+                        Text(context.tr(flagStanding(type)), style: t.caption),
                         if (widget.flagFor('${wo['id']}', type) case final f?)
                           EvidenceTable(f['evidence'] as Map? ?? const {})
                         else
-                          Text('No evidence row found for this flag.', style: t.caption),
+                          Text(context.tr('No evidence row found for this flag.'), style: t.caption),
                       ],
                       for (final issue in (wo['issue_ids'] as List? ?? const []))
                         TextButton.icon(
                           style: TextButton.styleFrom(padding: EdgeInsets.zero),
                           onPressed: () => openIssue('$issue'),
                           icon: const Icon(Icons.account_tree_outlined),
-                          label: Text('Complaint trail: $issue'),
+                          label: Text(context.tr('Complaint trail: {id}', {'id': issue})),
                         ),
                     ],
                   ),

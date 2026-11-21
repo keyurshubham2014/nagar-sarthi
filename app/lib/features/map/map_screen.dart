@@ -175,7 +175,7 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
               ? const SizedBox.shrink(key: ValueKey('none'))
               : Semantics(
                   key: const ValueKey('loading'),
-                  label: 'Loading ward and road data',
+                  label: context.tr('Loading ward and road data'),
                   child: const Skeleton(child: SkeletonBox(width: 220, height: AppSpacing.buttonHeight, radius: 28)),
                 ))
         : monsoonOn
@@ -195,7 +195,7 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
             children: [
               Positioned.fill(
                 child: CivicMap(
-                  semanticLabel: 'Map of Mumbai wards and repaired roads',
+                  semanticLabel: context.tr('Map of Mumbai wards and repaired roads'),
                   mapController: _map,
                   initialCameraFit: CameraFit.bounds(
                     bounds: kMumbaiBounds,
@@ -259,10 +259,10 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
                           valueListenable: _tilesFailedAt,
                           builder: (context, failedAt, _) => failedAt == null
                               ? const SizedBox.shrink()
-                              : const Padding(
-                                  padding: EdgeInsets.only(top: AppSpacing.s8),
+                              : Padding(
+                                  padding: const EdgeInsets.only(top: AppSpacing.s8),
                                   child: _Banner(
-                                    text: 'Map tiles could not load. Ward and road shapes are still shown.',
+                                    text: context.tr('Map tiles could not load. Ward and road shapes are still shown.'),
                                   ),
                                 ),
                         ),
@@ -281,8 +281,8 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
                   ),
                 ),
               if (data != null && data.wards.isEmpty)
-                const Center(
-                  child: _Floating(child: EmptyState(message: 'No ward data to show yet.')),
+                Center(
+                  child: _Floating(child: EmptyState(message: context.tr('No ward data to show yet.'))),
                 ),
               // Floating bottom: monsoon pill, panel or preview card, above the tab bar, then the credits.
               Positioned(
@@ -507,8 +507,8 @@ class _ScaleBar extends StatelessWidget {
         const SizedBox(height: AppSpacing.s4),
         Row(
           children: [
-            Expanded(child: Text('${context.tr('Low')} · ${ends.first.label}', style: t.caption)),
-            Text('${context.tr('High')} · ${ends.last.label}', style: t.caption),
+            Expanded(child: Text('${context.tr('Low')} · ${legendLabel(context, ends.first.label)}', style: t.caption)),
+            Text('${context.tr('High')} · ${legendLabel(context, ends.last.label)}', style: t.caption),
           ],
         ),
       ],
@@ -547,13 +547,22 @@ class _LegendItems extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(width: AppSpacing.s12),
-                Expanded(child: Text(e.label, style: context.type.body)),
+                Expanded(child: Text(legendLabel(context, e.label), style: context.type.body)),
               ],
             ),
           ),
       ],
     );
   }
+}
+
+/// A legend label in the app language: fixed labels by key, "15% or less" and "Under 3" by pattern.
+String legendLabel(BuildContext context, String label) {
+  final less = RegExp(r'^(.+) or less$').firstMatch(label);
+  if (less != null) return context.tr('{x} or less', {'x': less[1]});
+  final under = RegExp(r'^Under (.+)$').firstMatch(label);
+  if (under != null) return context.tr('Under {x}', {'x': under[1]});
+  return context.tr(label);
 }
 
 const Map<String, String> _layerHint = {
@@ -696,7 +705,7 @@ class _WardPreview extends ConsumerWidget {
     final ofBudget = budget == null || budget == 0 ? null : w.spend / budget;
     final failed = ((ref.watch(wardDetailProvider(w.code)).value?['by_flag_type'] as Map?)?['fix_failed'] as Map?)?['count'] as num?;
     return _PreviewCard(
-      title: 'Ward ${w.code}',
+      title: context.tr('Ward {w}', {'w': w.code}),
       subtitle: w.name == w.code ? '' : w.name,
       body: [
         const SizedBox(height: AppSpacing.s12),
@@ -747,13 +756,13 @@ class _RoadPreview extends ConsumerWidget {
     final jobs = (ref.watch(roadDetailProvider(r.id)).value?['work_orders'] as List?)?.length;
     return _PreviewCard(
       title: r.name,
-      subtitle: ['Ward ${r.wardCode}', ?type].join(' · '),
+      subtitle: [context.tr('Ward {w}', {'w': r.wardCode}), if (type != null) context.tr(type)].join(' · '),
       body: [
         const SizedBox(height: AppSpacing.s12),
         Align(
           alignment: Alignment.centerLeft,
           child: StatusChip(
-            flagShortLabels[r.status] ?? kNoFlags,
+            context.tr(flagShortLabels[r.status] ?? kNoFlags),
             tone: roadStatusTones[r.status] ?? StatusTone.neutral,
             dot: true,
           ),

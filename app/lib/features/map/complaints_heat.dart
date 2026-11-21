@@ -43,11 +43,11 @@ class _ComplaintsHeatLayerState extends ConsumerState<ComplaintsHeatLayer> {
     final clusters = async.value;
     if (clusters == null) {
       return _Status(
-        text: async.hasError ? 'Could not load complaints: ${async.error}' : 'Loading complaints…',
+        text: async.hasError ? '${context.tr('Could not load complaints.')} ${async.error}' : context.tr('Loading complaints…'),
         onRetry: async.hasError ? () => ref.invalidate(heatProvider) : null,
       );
     }
-    if (clusters.isEmpty) return const _Status(text: 'No open or repeat complaints here');
+    if (clusters.isEmpty) return _Status(text: context.tr('No open or repeat complaints here'));
     return GestureDetector(
       onTap: () {
         final c = _hit.value?.hitValues.firstOrNull;
@@ -106,18 +106,18 @@ void showHeatSheet(BuildContext context, Map cluster) {
   final count = cluster['count'] as int;
   showAppSheet<void>(
     context,
-    title: '$count complaints here · ${cluster['open']} $kHeatOpen',
+    title: context.tr('{n} complaints here · {open} open', {'n': count, 'open': cluster['open']}),
     builder: (context) => Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Gutter(child: Text('Showing ${sample.length} of $count (newest first)', style: context.type.caption)),
+        Gutter(child: Text(context.tr('Showing {n} of {total} (newest first)', {'n': sample.length, 'total': count}), style: context.type.caption)),
         const SizedBox(height: AppSpacing.s8),
         for (final (i, c) in sample.indexed)
           ListRow(
             icon: Icons.report_outlined,
-            title: '${c['category']} · ${c['locality']}',
+            title: '${context.tr('${c['category']}')} · ${c['locality']}',
             caption:
-                '${c['status']}${c['repeat'] == true ? ' · $kRepairReopened' : ''} · ${(c['received_at'] as String).split(' ').first}',
+                '${context.tr('${c['status']}')}${c['repeat'] == true ? ' · ${context.tr(kRepairReopened)}' : ''} · ${(c['received_at'] as String).split(' ').first}',
             chevron: false,
             divider: i < sample.length - 1,
           ),

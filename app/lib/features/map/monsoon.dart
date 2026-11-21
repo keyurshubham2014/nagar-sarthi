@@ -287,7 +287,7 @@ class MonsoonBar extends ConsumerWidget {
                 ],
               )
             : Semantics(
-                label: 'Loading the monsoon timeline',
+                label: context.tr('Loading the monsoon timeline'),
                 child: const Skeleton(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -315,8 +315,8 @@ class MonsoonBar extends ConsumerWidget {
     final alert = season.alert(day);
     final playing = s?.playing == true;
     final atEnd = s != null && !playing && day >= season.last;
-    final rainText = rain == null ? kMonsoonNoRain : 'Rain ${rain.toStringAsFixed(rain < 10 ? 1 : 0)} mm';
-    final playLabel = playing ? 'Pause' : (atEnd ? 'Replay the season' : kMonsoonPlay);
+    final rainText = rain == null ? context.tr(kMonsoonNoRain) : context.tr('Rain {n} mm', {'n': rain.toStringAsFixed(rain < 10 ? 1 : 0)});
+    final playLabel = context.tr(playing ? 'Pause' : (atEnd ? 'Replay the season' : kMonsoonPlay));
 
     return panel(
       Column(
@@ -376,7 +376,7 @@ class MonsoonBar extends ConsumerWidget {
             TextSpan(
               children: [
                 TextSpan(text: _count(season.repairsSoFar[day]), style: t.figure),
-                TextSpan(text: '  $kMonsoonRepairs so far', style: t.caption),
+                TextSpan(text: '  ${context.tr('repairs so far')}', style: t.caption),
               ],
             ),
           ),
@@ -413,7 +413,7 @@ class _Scrubber extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       children: [
         Semantics(
-          label: 'Day of the 2025 monsoon',
+          label: context.tr('Day of the 2025 monsoon'),
           value: season.dateLabel(day),
           child: SliderTheme(
             data: SliderTheme.of(context).copyWith(
@@ -505,7 +505,7 @@ class _SpeedChipState extends ConsumerState<_SpeedChip> {
       child: Center(
         child: Pressable(
           onTap: () => setState(widget.onTap),
-          semanticLabel: 'Replay speed $speed times. Tap to change.',
+          semanticLabel: context.tr('Replay speed {n} times. Tap to change.', {'n': speed}),
           color: c.surfaceAlt,
           borderRadius: AppRadii.pillRadius,
           padding: const EdgeInsets.symmetric(horizontal: AppSpacing.s12, vertical: AppSpacing.s8),
@@ -541,7 +541,7 @@ class _Counter extends StatelessWidget {
                   text: _count(n),
                   style: t.caption.copyWith(color: t.body.color, fontWeight: FontWeight.w700),
                 ),
-                TextSpan(text: ' $label'),
+                TextSpan(text: ' ${context.tr(label)}'),
               ],
             ),
             style: t.caption,
@@ -562,7 +562,7 @@ class _AlertChip extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: AppSpacing.s8, vertical: 3),
       decoration: ShapeDecoration(color: bg, shape: AppRadii.pill),
       child: Text(
-        '$alert alert',
+        context.tr('{alert} alert', {'alert': context.tr(alert)}),
         style: context.type.label.copyWith(
           fontSize: 12,
           height: 16 / 12,

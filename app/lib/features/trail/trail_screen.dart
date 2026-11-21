@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../app_router.dart';
 import '../../core/api/api_client.dart';
 import '../../core/format.dart';
+import '../../core/i18n.dart';
 import '../../core/widgets/ui.dart';
 import '../citizen/citizen_panels.dart' show pushComplaint;
 import '../officer/officer_data.dart' show Json;
@@ -48,14 +49,20 @@ StatusTone _outcomeTone(String? o) => switch (o) {
   _ => StatusTone.warning,
 };
 
-String _hours(num? h) => h == null
-    ? 'close to the first report'
+String _hours(BuildContext context, num? h) => h == null
+    ? context.tr('close to the first report')
     : h < 0
-    ? '${(-h).round()} hours before the first report'
-    : '${h.round()} hours after the first report';
+    ? context.tr('{n} hours before the first report', {'n': (-h).round()})
+    : context.tr('{n} hours after the first report', {'n': h.round()});
 String _day(Object? s) => '${s ?? '—'}'.split(' ').first;
 String _plain(Object? name) => '${name ?? '—'}'.replaceAll(' (synthetic)', '');
-String _plural(num n, String one, String many) => '${formatCount(n)} ${n == 1 ? one : many}';
+
+/// "{n} report" / "{n} reports" templates, translated, with the count in Indian grouping.
+String _plural(BuildContext context, num n, String one, String many) => context.tr(n == 1 ? one : many, {'n': formatCount(n)});
+
+/// The engine's category-correction note ("photo: 'manhole'", "text (hi-en): 'khadd'"): the source word translates.
+String _why(BuildContext context, Object? r) =>
+    '$r'.replaceFirstMapped(RegExp(r'^(text|photo)'), (m) => context.tr(m[1]!));
 
 PictogramKind _pictogram(Object? category) {
   final s = '${category ?? ''}'.toLowerCase();
@@ -66,9 +73,9 @@ PictogramKind _pictogram(Object? category) {
   return PictogramKind.pothole;
 }
 
-Widget outcomeTag(BuildContext context, String? o) => StatusChip(outcomeLabels[o] ?? '$o', tone: _outcomeTone(o), dot: true);
+Widget outcomeTag(BuildContext context, String? o) => StatusChip(context.tr(outcomeLabels[o] ?? '$o'), tone: _outcomeTone(o), dot: true);
 
-Widget inferredTag(BuildContext context) => const StatusChip(kInferredLink, tone: StatusTone.info);
+Widget inferredTag(BuildContext context) => StatusChip(context.tr(kInferredLink), tone: StatusTone.info);
 
 // ---------------------------------------------------------------- list page
 
@@ -147,7 +154,7 @@ class _TrailPageState extends ConsumerState<TrailPage> {
       if (widget.ward != null) ...[
         Gutter(
           child: SegmentedControl<bool>(
-            segments: [(false, 'Ward ${widget.ward}'), (true, 'All Mumbai')],
+            segments: [(false, context.tr('Ward {w}', {'w': widget.ward})), (true, context.tr('All Mumbai'))],
             value: _allMumbai,
             onChanged: (v) => _set(() => _allMumbai = v),
           ),
@@ -161,7 +168,7 @@ class _TrailPageState extends ConsumerState<TrailPage> {
         ),
       ),
       const SectionBreak(),
-      const Gutter(child: SectionHeading('Issues')),
+      Gutter(child: SectionHeading(context.tr('Issues'))),
       FilterChipRow(
         children: [
           for (final (k, label) in [
@@ -169,14 +176,14 @@ class _TrailPageState extends ConsumerState<TrailPage> {
             ...outcomeLabels.entries.map((e) => (e.key, e.value)),
             ('social_only', 'Social media only'),
           ])
-            FilterPill(label: label, selected: _outcome == k, onTap: () => _set(() => _outcome = k)),
+            FilterPill(label: context.tr(label), selected: _outcome == k, onTap: () => _set(() => _outcome = k)),
         ],
       ),
       const SizedBox(height: AppSpacing.s8),
       Gutter(
         child: SearchField(
           controller: _search,
-          hint: 'Place, road or any id',
+          hint: context.tr('Place, road or any id'),
           onChanged: (_) {
             _debounce?.cancel();
             _debounce = Timer(const Duration(milliseconds: 350), () => _load(reset: true));
@@ -187,7 +194,7 @@ class _TrailPageState extends ConsumerState<TrailPage> {
       const SizedBox(height: AppSpacing.s12),
       Gutter(
         child: Text(
-          '${_total == 1 ? '1 issue' : '${formatCount(_total)} issues'} · most reported first',
+          '${_plural(context, _total, '1 issue', '{n} issues')} · ${context.tr('most reported first')}',
           style: t.caption,
         ),
       ),
@@ -195,23 +202,23 @@ class _TrailPageState extends ConsumerState<TrailPage> {
     ];
     final footer = <Widget>[
       if (_error != null)
-        ErrorState(message: 'Could not load issues. $_error', onRetry: () => _load(reset: _items.isEmpty))
+        ErrorState(message: '${context.tr('Could not load issues.')} $_error', onRetry: () => _load(reset: _items.isEmpty))
       else if (_loading)
         Skeleton.rows(count: _items.isEmpty ? 6 : 2)
       else if (_items.isEmpty)
-        const EmptyState(pictogram: PictogramKind.trail, message: 'No issues match these filters.')
+        EmptyState(pictogram: PictogramKind.trail, message: context.tr('No issues match these filters.'))
       else if (_items.length < _total)
         Padding(
           padding: const EdgeInsets.fromLTRB(AppSpacing.gutter, AppSpacing.s16, AppSpacing.gutter, 0),
           child: SecondaryButton(
-            label: 'Load more (${_items.length} of ${formatCount(_total)} shown)',
+            label: context.tr('Load more ({n} of {total} shown)', {'n': _items.length, 'total': formatCount(_total)}),
             onPressed: () => _load(reset: false),
           ),
         ),
     ];
     return LargeTitleScaffold(
-      title: 'Complaint trail',
-      caption: 'From a citizen’s report to a finished repair',
+      title: context.tr('Complaint trail'),
+      caption: context.tr('From a citizen’s report to a finished repair'),
       onRefresh: () async {
         ref.invalidate(linkerProvider(_ward ?? ''));
         await _load(reset: true);
@@ -244,7 +251,7 @@ class _Funnel extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) => switch (ref.watch(linkerProvider(ward))) {
     AsyncData(:final value) => _FunnelBody(l: value, ward: ward),
     AsyncError(:final error) => ErrorState(
-      message: 'Could not load the funnel. $error',
+      message: '${context.tr('Could not load the funnel.')} $error',
       onRetry: () => ref.invalidate(linkerProvider(ward)),
     ),
     _ => Skeleton(
@@ -303,25 +310,26 @@ class _FunnelBodyState extends State<_FunnelBody> with SingleTickerProviderState
     num count(String o) => (by[o] as Map)['count'] as num? ?? 0;
     num inr(String o) => (by[o] as Map)['inr'] as num? ?? 0;
     final held = inr('fixed_held');
+    String tr(String s, [int? n]) => context.tr(s, {'n': formatCount(n ?? 0)});
     final steps = [
-      (raw, 'complaints received', null, c.primary),
+      (raw, tr('complaints received'), null, c.primary),
       (
         l['in_issues'] as int,
-        'after removing noise and out-of-scope',
-        '${formatCount(l['noise'] as int)} not about roads (street lights, garbage, tests) · '
-            '${formatCount(l['out_of_scope'] as int)} not BMC’s road (MMRDA, PWD)',
+        tr('after removing noise and out-of-scope'),
+        '${tr('{n} not about roads (street lights, garbage, tests)', l['noise'] as int)} · '
+            '${tr('{n} not BMC’s road (MMRDA, PWD)', l['out_of_scope'] as int)}',
         c.primary,
       ),
-      (issues, 'distinct issues', '${formatCount(l['social_only_issues'] as int)} from social posts only', c.primary),
-      (l['with_work_order'] as int, 'with a work order', '${formatCount(links['inferred'] as int)} inferred', c.primary),
-      (count('fixed_held'), 'fixed and held', held == 0 ? null : formatInr(held), c.success),
+      (issues, tr('distinct issues'), tr('{n} from social posts only', l['social_only_issues'] as int), c.primary),
+      (l['with_work_order'] as int, tr('with a work order'), tr('{n} inferred', links['inferred'] as int), c.primary),
+      (count('fixed_held'), tr('fixed and held'), held == 0 ? null : formatInr(held), c.success),
     ];
     final total = _c.duration!.inMilliseconds;
     Widget dot(Color col) => Container(width: 8, height: 8, decoration: BoxDecoration(color: col, shape: BoxShape.circle));
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(widget.ward.isEmpty ? 'All Mumbai' : 'Ward ${widget.ward}', style: t.label.copyWith(color: c.textSecondary)),
+        Text(widget.ward.isEmpty ? context.tr('All Mumbai') : context.tr('Ward {w}', {'w': widget.ward}), style: t.label.copyWith(color: c.textSecondary)),
         const SizedBox(height: AppSpacing.s12),
         for (final (i, (n, label, note, col)) in steps.indexed) ...[
           Semantics(
@@ -364,7 +372,7 @@ class _FunnelBodyState extends State<_FunnelBody> with SingleTickerProviderState
           ),
           const SizedBox(height: AppSpacing.s16),
         ],
-        Text('The other ${_plural(issues - count('fixed_held'), 'issue', 'issues')}', style: t.label.copyWith(color: c.textSecondary)),
+        Text(_plural(context, issues - count('fixed_held'), 'The other 1 issue', 'The other {n} issues'), style: t.label.copyWith(color: c.textSecondary)),
         const SizedBox(height: AppSpacing.s4),
         for (final o in ['fixed_failed', 'in_progress', 'never_fixed'])
           Padding(
@@ -375,7 +383,7 @@ class _FunnelBodyState extends State<_FunnelBody> with SingleTickerProviderState
                 const SizedBox(width: AppSpacing.s8),
                 Expanded(
                   child: Text(
-                    '${formatCount(count(o))} ${outcomeLabels[o]!.toLowerCase()}${inr(o) == 0 ? '' : ' · ${formatInr(inr(o))}'}',
+                    '${formatCount(count(o))} ${context.tr(outcomeLabels[o]!.toLowerCase())}${inr(o) == 0 ? '' : ' · ${formatInr(inr(o))}'}',
                     style: t.body,
                   ),
                 ),
@@ -384,13 +392,16 @@ class _FunnelBodyState extends State<_FunnelBody> with SingleTickerProviderState
           ),
         const SizedBox(height: AppSpacing.s12),
         Text(
-          '${formatPercent(l['categories_corrected_share'] as num)} of categories corrected '
-          '(${formatCount(l['categories_corrected'] as int)} of ${formatCount(raw)} complaints).',
+          context.tr('{p} of categories corrected ({n} of {total} complaints).', {
+            'p': formatPercent(l['categories_corrected_share'] as num),
+            'n': formatCount(l['categories_corrected'] as int),
+            'total': formatCount(raw),
+          }),
           style: t.bodyStrong,
         ),
-        Text('Rupees count recorded links only.', style: t.caption),
+        Text(context.tr('Rupees count recorded links only.'), style: t.caption),
         const SizedBox(height: AppSpacing.s16),
-        CollapsiblePanel(title: 'How we link, and how often it is right', icon: Icons.link, child: HowWeLink(l)),
+        CollapsiblePanel(title: context.tr('How we link, and how often it is right'), icon: Icons.link, child: HowWeLink(l)),
       ],
     );
   }
@@ -414,19 +425,30 @@ class HowWeLink extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        for (final m in (l['method'] as List? ?? const [])) bullet('$m'),
+        // The engine's method lines are a fixed set: each one has a translation.
+        for (final m in (l['method'] as List? ?? const [])) bullet(context.tr('$m')),
         const SizedBox(height: AppSpacing.s16),
-        Semantics(header: true, child: Text('How often it is right', style: t.bodyStrong)),
-        bullet('Category: the category people picked matched the repair BMC actually did ${formatPercent(cat['reported_vs_work_type'] as num? ?? 0)} '
-            'of the time; after our correction, ${formatPercent(cat['clean_vs_work_type'] as num? ?? 0)}.'),
-        bullet('Grouping: tested blind against BMC’s own links, our rules put the right complaints together '
-            '${formatPercent(grp['precision'] as num? ?? 0)} of the time and found ${formatPercent(grp['recall'] as num? ?? 0)} of the true pairs. '
-            'So complaints BMC linked are grouped by BMC’s work order; the rules only group the ones BMC never linked.'),
-        bullet('Inferred links: tested blind on issues with a recorded link, our best match picked BMC’s own work order '
-            '${formatPercent(inf['accuracy_when_matched'] as num? ?? 0)} of the time. About 1 in '
-            '${((1 / (1 - ((inf['accuracy_when_matched'] as num?) ?? 0.8))).round())} inferred links may be wrong, so each is marked “$kInferredLink”.'),
+        Semantics(header: true, child: Text(context.tr('How often it is right'), style: t.bodyStrong)),
+        bullet(context.tr(
+          'Category: the category people picked matched the repair BMC actually did {p} of the time; after our correction, {q}.',
+          {'p': formatPercent(cat['reported_vs_work_type'] as num? ?? 0), 'q': formatPercent(cat['clean_vs_work_type'] as num? ?? 0)},
+        )),
+        bullet(context.tr(
+          'Grouping: tested blind against BMC’s own links, our rules put the right complaints together {p} of the time and found {q} of the true pairs. '
+          'So complaints BMC linked are grouped by BMC’s work order; the rules only group the ones BMC never linked.',
+          {'p': formatPercent(grp['precision'] as num? ?? 0), 'q': formatPercent(grp['recall'] as num? ?? 0)},
+        )),
+        bullet(context.tr(
+          'Inferred links: tested blind on issues with a recorded link, our best match picked BMC’s own work order {p} of the time. '
+          'About 1 in {n} inferred links may be wrong, so each is marked “{tag}”.',
+          {
+            'p': formatPercent(inf['accuracy_when_matched'] as num? ?? 0),
+            'n': ((1 / (1 - ((inf['accuracy_when_matched'] as num?) ?? 0.8))).round()),
+            'tag': context.tr(kInferredLink),
+          },
+        )),
         const SizedBox(height: AppSpacing.s12),
-        Text('Synthetic data. Not BMC data. Contractors are fictional.', style: t.caption),
+        Text(context.tr('Synthetic data. Not BMC data. Contractors are fictional.'), style: t.caption),
       ],
     );
   }
@@ -447,9 +469,9 @@ class IssueRow extends StatelessWidget {
     final wos = (i['work_order_ids'] as List?) ?? const [];
     final place = [i['road_name'], i['locality']].whereType<String>().toSet().join(', ');
     final notes = [
-      if (fixedCats > 0) _plural(fixedCats, 'category corrected', 'categories corrected'),
-      if (i['link'] == 'inferred') kInferredLink,
-      if (i['source'] == 'social_only') 'Social media only',
+      if (fixedCats > 0) _plural(context, fixedCats, '1 category corrected', '{n} categories corrected'),
+      if (i['link'] == 'inferred') context.tr(kInferredLink),
+      if (i['source'] == 'social_only') context.tr('Social media only'),
     ];
     return ListRow(
       leading: Stack(
@@ -476,9 +498,9 @@ class IssueRow extends StatelessWidget {
             ),
         ],
       ),
-      title: '${i['category']} · ${place.isEmpty ? 'Ward ${i['ward_code']}' : place}',
+      title: '${context.tr('${i['category']}')} · ${place.isEmpty ? context.tr('Ward {w}', {'w': i['ward_code']}) : place}',
       caption: [
-        [if (n > 0) _plural(n, 'report', 'reports'), if (p > 0) _plural(p, 'post', 'posts')].join(' + '),
+        [if (n > 0) _plural(context, n, '1 report', '{n} reports'), if (p > 0) _plural(context, p, '1 post', '{n} posts')].join(' + '),
         '${i['id']}',
         if (wos.isNotEmpty) '${wos.join(', ')} · ${_plain(i['contractor_name'])}',
       ].where((s) => s.isNotEmpty).join(' · '),
@@ -516,16 +538,21 @@ class _IssueDetailState extends ConsumerState<IssueDetail> {
     final d = v.value;
     final place = d == null ? '' : [d['road_name'], d['locality']].whereType<String>().toSet().join(', ');
     return LargeTitleScaffold(
-      title: d == null ? 'Issue ${widget.id}' : '${d['category']} · ${place.isEmpty ? 'Ward ${d['ward_code']}' : place}',
-      caption: d == null ? null : '${d['id']} · Ward ${d['ward_code']} · ${_day(d['first_seen'])} to ${_day(d['last_seen'])}',
+      title: d == null
+          ? context.tr('Issue {id}', {'id': widget.id})
+          : '${context.tr('${d['category']}')} · ${place.isEmpty ? context.tr('Ward {w}', {'w': d['ward_code']}) : place}',
+      caption: d == null
+          ? null
+          : '${d['id']} · ${context.tr('Ward {w}', {'w': d['ward_code']})} · '
+                '${context.tr('{a} to {b}', {'a': _day(d['first_seen']), 'b': _day(d['last_seen'])})}',
       onRefresh: () => ref.refresh(issueProvider(widget.id).future),
       children: [
         if (d != null)
           ..._body(context, d)
         else if (v.error case ApiException(status: 404))
-          EmptyState(pictogram: PictogramKind.track, message: 'No issue with id ${widget.id}.')
+          EmptyState(pictogram: PictogramKind.track, message: context.tr('No issue with id {id}.', {'id': widget.id}))
         else if (v.hasError)
-          ErrorState(message: 'Could not load this issue.\n${v.error}', onRetry: () => ref.invalidate(issueProvider(widget.id)))
+          ErrorState(message: '${context.tr('Could not load this issue.')}\n${v.error}', onRetry: () => ref.invalidate(issueProvider(widget.id)))
         else
           Gutter(
             child: Skeleton(
@@ -573,68 +600,75 @@ class _IssueDetailState extends ConsumerState<IssueDetail> {
       for (final x in shown) _complaintStep(context, x, link),
       if (folded.isNotEmpty)
         TimelineStep(
-          title: '+${folded.length} same report',
-          meta: 'Closed by BMC as duplicates of the first report.',
+          title: context.tr('+{n} same report', {'n': folded.length}),
+          meta: context.tr('Closed by BMC as duplicates of the first report.'),
           state: TimelineNodeState.pending,
-          child: TextButton(style: link, onPressed: () => setState(() => _showAll = true), child: const Text('Show them')),
+          child: TextButton(style: link, onPressed: () => setState(() => _showAll = true), child: Text(context.tr('Show them'))),
         ),
       for (final p in posts)
         TimelineStep(
-          title: 'Social post · reach ${formatCount(p['reach'] as num? ?? 0)}',
+          title: context.tr('Social post · reach {n}', {'n': formatCount(p['reach'] as num? ?? 0)}),
           meta: _day(p['posted_at']),
-          chip: StatusChip('${p['source'] ?? 'Social post'}'),
+          chip: StatusChip(p['source'] == null ? context.tr('Social post') : '${p['source']}'),
           child: Text('“${p['text'] ?? ''}”', style: t.body),
         ),
       if (wos.isEmpty)
         TimelineStep(
-          title: 'No work order found',
+          title: context.tr('No work order found'),
           state: TimelineNodeState.pending,
-          meta: d['source'] == 'social_only'
-              ? 'These posts matched no complaint in BMC’s system and no repair job.'
-              : 'No repair job is recorded for these complaints, and none matched by road, type and date.',
+          meta: context.tr(
+            d['source'] == 'social_only'
+                ? 'These posts matched no complaint in BMC’s system and no repair job.'
+                : 'No repair job is recorded for these complaints, and none matched by road, type and date.',
+          ),
         ),
       for (final wo in wos)
         TimelineStep(
-          title: 'Work order ${wo['id']}',
+          title: context.tr('Work order {id}', {'id': wo['id']}),
           amount: formatInr(wo['cost_inr'] as num? ?? 0),
-          meta: '${wo['method']} · ${_plain(wo['contractor_name'])}\n'
-              'Assigned ${_day(wo['assigned_at'])}, completed ${_day(wo['completed_at'])}'
-              '${wo['under_dlp'] == 'Y' ? '\nRoad under warranty' : ''}',
+          meta: '${context.tr('${wo['method']}')} · ${_plain(wo['contractor_name'])}\n'
+              '${context.tr('Assigned {a}, completed {b}', {'a': _day(wo['assigned_at']), 'b': _day(wo['completed_at'])})}'
+              '${wo['under_dlp'] == 'Y' ? '\n${context.tr('Road under warranty')}' : ''}',
           chip: inferred ? inferredTag(context) : null,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               if (inferred && ev != null)
                 Text(
-                  'Our best match, not BMC’s record: same road and repair type, assigned ${_hours(ev['hours_after_first_report'] as num?)}'
-                  '${(ev['candidates'] as num? ?? 1) > 1 ? ', nearest in time of ${ev['candidates']} jobs' : ''}.',
+                  context.tr('Our best match, not BMC’s record: same road and repair type, assigned {when}{nearest}.', {
+                    'when': _hours(context, ev['hours_after_first_report'] as num?),
+                    'nearest': (ev['candidates'] as num? ?? 1) > 1 ? context.tr(', nearest in time of {n} jobs', {'n': ev['candidates']}) : '',
+                  }),
                   style: t.caption,
                 ),
               TextButton.icon(
                 style: link,
                 onPressed: () => openRoad(wo['road_id'] as String, wo: wo['id'] as String),
                 icon: const Icon(Icons.alt_route, size: AppSpacing.iconSmall),
-                label: Text('Open road: ${wo['road_name']}'),
+                label: Text(context.tr('Open road: {name}', {'name': wo['road_name']})),
               ),
             ],
           ),
         ),
       TimelineStep(
-        title: outcomeLabels[d['outcome']] ?? '${d['outcome']}',
+        title: context.tr(outcomeLabels[d['outcome']] ?? '${d['outcome']}'),
         state: TimelineNodeState.outcome,
         color: outcomeColor(c, d['outcome'] as String?),
         meta: switch (d['outcome']) {
-          'fixed_held' => 'Not reported again within 30 days of the repair${d['days_to_fix'] == null ? '' : ' (fixed ${d['days_to_fix']} days after the first report)'}.',
-          'fixed_failed' => 'Reported again within 30 days of the repair: needs review.',
-          'in_progress' => 'BMC marked a complaint In Progress; no work order is recorded yet.',
-          _ => 'No repair is recorded for this issue.',
+          'fixed_held' => d['days_to_fix'] == null
+              ? context.tr('Not reported again within 30 days of the repair.')
+              : context.tr('Not reported again within 30 days of the repair (fixed {n} days after the first report).', {'n': d['days_to_fix']}),
+          'fixed_failed' => context.tr('Reported again within 30 days of the repair: needs review.'),
+          'in_progress' => context.tr('BMC marked a complaint In Progress; no work order is recorded yet.'),
+          _ => context.tr('No repair is recorded for this issue.'),
         },
       ),
     ];
     final summary = [
-      if (complaints.isNotEmpty) _plural(complaints.length, 'complaint', 'complaints'),
-      if ((d['channels'] as List? ?? const []).isNotEmpty) 'via ${(d['channels'] as List).join(', ')}',
-      if (posts.isNotEmpty) _plural(posts.length, 'social post', 'social posts'),
+      if (complaints.isNotEmpty) _plural(context, complaints.length, '1 complaint', '{n} complaints'),
+      if ((d['channels'] as List? ?? const []).isNotEmpty)
+        context.tr('via {channels}', {'channels': (d['channels'] as List).map((ch) => context.tr('$ch')).join(', ')}),
+      if (posts.isNotEmpty) _plural(context, posts.length, '1 social post', '{n} social posts'),
     ].join(' · ');
     return [
       Gutter(
@@ -644,12 +678,12 @@ class _IssueDetailState extends ConsumerState<IssueDetail> {
           children: [
             outcomeTag(context, d['outcome'] as String?),
             if (inferred) inferredTag(context),
-            if (d['source'] == 'social_only') const StatusChip('Social media only'),
+            if (d['source'] == 'social_only') StatusChip(context.tr('Social media only')),
           ],
         ),
       ),
       if (summary.isNotEmpty) ...[const SizedBox(height: AppSpacing.s12), Gutter(child: Text(summary, style: t.body))],
-      if (d['source'] == 'social_only') Gutter(child: Text('No matching complaint in BMC’s system.', style: t.caption)),
+      if (d['source'] == 'social_only') Gutter(child: Text(context.tr('No matching complaint in BMC’s system.'), style: t.caption)),
       if (inferred) ...[
         const SizedBox(height: AppSpacing.s16),
         Gutter(
@@ -663,8 +697,11 @@ class _IssueDetailState extends ConsumerState<IssueDetail> {
                 const SizedBox(width: AppSpacing.s8),
                 Expanded(
                   child: Text(
-                    'An inferred link is our best match by road, repair type and date, not a link recorded by BMC.'
-                    '${accuracy == null ? '' : ' Tested blind on recorded links, such matches were right ${formatPercent(accuracy)} of the time.'}',
+                    [
+                      context.tr('An inferred link is our best match by road, repair type and date, not a link recorded by BMC.'),
+                      if (accuracy != null)
+                        context.tr('Tested blind on recorded links, such matches were right {p} of the time.', {'p': formatPercent(accuracy)}),
+                    ].join(' '),
                     style: t.body,
                   ),
                 ),
@@ -674,7 +711,7 @@ class _IssueDetailState extends ConsumerState<IssueDetail> {
         ),
       ],
       const SectionBreak(),
-      const Gutter(child: SectionHeading('Timeline')),
+      Gutter(child: SectionHeading(context.tr('Timeline'))),
       Gutter(child: Timeline(steps: steps)),
     ];
   }
@@ -684,14 +721,18 @@ class _IssueDetailState extends ConsumerState<IssueDetail> {
     final t = AppTypeScale.of(context);
     final corrected = x['category_corrected'] == true;
     return TimelineStep(
-      title: 'Complaint ${x['id']}${x['channel'] == null ? '' : ' · ${x['channel']}'}',
-      meta: '${_day(x['received_at'])} · ${x['status']}${(x['upvotes'] as num? ?? 0) > 0 ? ' · ${x['upvotes']} upvotes' : ''}',
+      title: '${context.tr('Complaint {id}', {'id': x['id']})}${x['channel'] == null ? '' : ' · ${context.tr('${x['channel']}')}'}',
+      meta: '${_day(x['received_at'])} · ${context.tr('${x['status']}')}'
+          '${(x['upvotes'] as num? ?? 0) > 0 ? ' · ${context.tr('{n} upvotes', {'n': x['upvotes']})}' : ''}',
       chip: corrected
           ? Container(
               padding: const EdgeInsets.symmetric(horizontal: AppSpacing.s8, vertical: AppSpacing.s4),
               decoration: BoxDecoration(color: c.infoTint, borderRadius: AppRadii.controlRadius),
               child: Text(
-                'Reported as ${x['category_reported']} → corrected to ${x['category_clean']}',
+                context.tr('Reported as {a} → corrected to {b}', {
+                  'a': context.tr('${x['category_reported']}'),
+                  'b': context.tr('${x['category_clean']}'),
+                }),
                 style: t.label.copyWith(color: c.info),
               ),
             )
@@ -701,10 +742,10 @@ class _IssueDetailState extends ConsumerState<IssueDetail> {
         children: [
           Text('“${x['description']}”', style: t.body),
           if (corrected && x['category_reason'] != null)
-            Text('Why: ${x['category_reason']}', style: t.caption)
+            Text(context.tr('Why: {r}', {'r': _why(context, x['category_reason'])}), style: t.caption)
           else if (!corrected)
-            Text('Category: ${x['category_clean']}', style: t.caption),
-          TextButton(style: link, onPressed: () => pushComplaint(context, x['id'] as String), child: const Text('Open complaint')),
+            Text(context.tr('Category: {c}', {'c': context.tr('${x['category_clean']}')}), style: t.caption),
+          TextButton(style: link, onPressed: () => pushComplaint(context, x['id'] as String), child: Text(context.tr('Open complaint'))),
         ],
       ),
     );

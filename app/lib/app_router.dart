@@ -2,6 +2,8 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import 'core/i18n.dart';
+
 import 'core/auth/session.dart';
 import 'core/dev/gallery.dart';
 import 'features/about/about_screen.dart';
@@ -74,7 +76,11 @@ final appRouter = GoRouter(
     GoRoute(
       path: '/next-rupee',
       redirect: (_, s) => _q(s, 'ward') == null ? '/' : null,
-      builder: (_, s) => DetailPage(title: 'Next rupee · Ward ${_q(s, 'ward')}', heading: false, body: NextRupeeList(_q(s, 'ward')!)),
+      builder: (c, s) => DetailPage(
+        title: '${c.tr('Next rupee')} · ${c.tr('Ward {w}', {'w': _q(s, 'ward')})}',
+        heading: false,
+        body: NextRupeeList(_q(s, 'ward')!),
+      ),
     ),
     // Complaint trail: no ward opens on all Mumbai.
     GoRoute(
@@ -112,7 +118,7 @@ class _WardPage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final name = ref.watch(mapDataProvider).value?.wardByCode[code]?.name;
-    return DetailPage(title: 'Ward $code', subtitle: name, body: WardPanel(code));
+    return DetailPage(title: context.tr('Ward {w}', {'w': code}), subtitle: name, body: WardPanel(code));
   }
 }
 
@@ -125,7 +131,7 @@ class _RoadPage extends ConsumerWidget {
     final road = ref.watch(mapDataProvider).value?.roadById[id];
     return DetailPage(
       title: road?.name ?? id,
-      subtitle: road == null ? null : 'Ward ${road.wardCode} · $id',
+      subtitle: road == null ? null : '${context.tr('Ward {w}', {'w': road.wardCode})} · $id',
       body: RoadPanel(id, focusWo: wo),
     );
   }

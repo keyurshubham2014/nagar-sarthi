@@ -116,13 +116,13 @@ class HomeScreen extends ConsumerWidget {
     _OfficerHero(ward: ward, onOpenAudit: () => goTab(_actTab)),
     _OfficerStats(ward: ward),
     _Heading(
-      'Needs your attention',
+      context.tr('Needs your attention'),
       top: AppSpacing.s40,
-      trailing: TextButton(onPressed: () => goTab(_actTab), child: const Text('See all')),
+      trailing: TextButton(onPressed: () => goTab(_actTab), child: Text(context.tr('See all'))),
     ),
     _TopFlags(ward: ward),
     const SectionBreak(space: AppSpacing.s32),
-    _Heading('Tools'),
+    _Heading(context.tr('Tools')),
     _Tools(ward: ward, goTab: goTab, brief: true),
   ];
 
@@ -130,8 +130,8 @@ class HomeScreen extends ConsumerWidget {
     _BudgetHero(ward: ward),
     Gutter(
       child: _WideActionTile(
-        title: kWardBrief,
-        caption: 'A one-page summary you can share, in English, हिंदी or मराठी',
+        title: context.tr(kWardBrief),
+        caption: context.tr('A one-page summary you can share, in English, हिंदी or मराठी'),
         pictogram: PictogramKind.brief,
         onTap: () => showWardBrief(context, ward),
       ),
@@ -139,18 +139,18 @@ class HomeScreen extends ConsumerWidget {
     const SizedBox(height: AppSpacing.tileGap),
     _WardStats(ward: ward, corporator: true),
     _Heading(
-      kContractorsInWard,
+      context.tr(kContractorsInWard),
       top: AppSpacing.s40,
       trailing: TextButton(
-        onPressed: () => pushPanel(PanelPage('$kContractorsInWard · Ward $ward', ScorecardList(ward: ward))),
-        child: const Text('See all'),
+        onPressed: () => pushPanel(PanelPage('${context.tr(kContractorsInWard)} · ${context.tr('Ward {w}', {'w': ward})}', ScorecardList(ward: ward))),
+        child: Text(context.tr('See all')),
       ),
     ),
     _Contractors(ward: ward),
-    _Heading('Top items to look at', top: AppSpacing.s40),
+    _Heading(context.tr('Top items to look at'), top: AppSpacing.s40),
     _TopFlags(ward: ward),
     const SectionBreak(space: AppSpacing.s32),
-    _Heading('Tools'),
+    _Heading(context.tr('Tools')),
     _Tools(ward: ward, goTab: goTab, brief: false),
   ];
 }
@@ -315,8 +315,14 @@ class _WardStats extends ConsumerWidget {
             return StatRow(
               tiles: [
                 review,
-                StatTile.count(count: jobs == 0 ? 0 : failed / jobs, format: formatPercent, label: 'repairs failed within 30 days', color: c.error, dot: c.error),
-                StatTile.count(count: (w['never_fixed'] as List?)?.length ?? 0, label: 'complaints never fixed'),
+                StatTile.count(
+                  count: jobs == 0 ? 0 : failed / jobs,
+                  format: formatPercent,
+                  label: context.tr('repairs failed within 30 days'),
+                  color: c.error,
+                  dot: c.error,
+                ),
+                StatTile.count(count: (w['never_fixed'] as List?)?.length ?? 0, label: context.tr('complaints never fixed')),
               ],
             );
           }
@@ -353,15 +359,15 @@ class _OfficerHero extends ConsumerWidget {
     child: _block(
       ref.watch(wardDetailProvider(ward)),
       skeleton: _heroSkeleton(),
-      error: 'Could not load ward $ward.',
+      error: context.tr('Could not load ward {w}.', {'w': ward}),
       onRetry: () => ref.invalidate(wardDetailProvider(ward)),
       data: (w) => Gutter(
         child: HeroFigure(
-          caption: 'To review in Ward $ward',
+          caption: context.tr('To review in Ward {w}', {'w': ward}),
           value: w['flagged_inr'] as num? ?? 0,
           format: formatInr,
-          explanation: "${formatPercent(w['flagged_share'] as num? ?? 0)} of this monsoon's road spend",
-          action: PrimaryButton(label: 'Open audit', icon: Icons.fact_check_outlined, onPressed: onOpenAudit, expand: false),
+          explanation: context.tr('{p} of this monsoon’s road spend', {'p': formatPercent(w['flagged_share'] as num? ?? 0)}),
+          action: PrimaryButton(label: context.tr('Open audit'), icon: Icons.fact_check_outlined, onPressed: onOpenAudit, expand: false),
         ),
       ),
     ),
@@ -379,7 +385,7 @@ class _OfficerStats extends ConsumerWidget {
       child: _block(
         ref.watch(wardDetailProvider(ward)),
         skeleton: Skeleton.tiles(),
-        error: 'Could not load ward $ward.',
+        error: context.tr('Could not load ward {w}.', {'w': ward}),
         onRetry: () => ref.invalidate(wardDetailProvider(ward)),
         data: (w) {
           final bft = (w['by_flag_type'] as Map?) ?? const {};
@@ -387,20 +393,24 @@ class _OfficerStats extends ConsumerWidget {
           final items = (nr.value?['items'] as List?)?.length;
           return StatRow(
             tiles: [
-              StatTile.count(count: dlp['inr'] as num? ?? 0, format: formatInr, label: '${dlp['count'] ?? 0} warranty claims to make'),
+              StatTile.count(
+                count: dlp['inr'] as num? ?? 0,
+                format: formatInr,
+                label: context.tr('{n} warranty claims to make', {'n': dlp['count'] ?? 0}),
+              ),
               StatTile.count(
                 count: (bft['fix_failed'] as Map?)?['count'] as num? ?? 0,
-                label: 'repairs failed within 30 days',
+                label: context.tr('repairs failed within 30 days'),
                 color: c.error,
                 dot: c.error,
               ),
               items == null
                   ? StatTile(
                       value: '—',
-                      label: nr.hasError ? 'Next rupee: tap to retry' : 'items ranked for the next rupee',
+                      label: context.tr(nr.hasError ? 'Next rupee: tap to retry' : 'items ranked for the next rupee'),
                       onTap: nr.hasError ? () => ref.invalidate(nextRupeeProvider(ward)) : null,
                     )
-                  : StatTile.count(count: items, label: 'items ranked for the next rupee', onTap: () => showNextRupee(ref, ward)),
+                  : StatTile.count(count: items, label: context.tr('items ranked for the next rupee'), onTap: () => showNextRupee(ref, ward)),
             ],
           );
         },
@@ -417,10 +427,10 @@ class _TopFlags extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) => _block(
     ref.watch(topFlagsProvider(ward)),
     skeleton: Skeleton.rows(count: 5),
-    error: 'Could not load flags.',
+    error: context.tr('Could not load flags.'),
     onRetry: () => ref.invalidate(topFlagsProvider(ward)),
     data: (flags) => flags.isEmpty
-        ? const EmptyState(message: 'No flags in this ward.', pictogram: PictogramKind.warranty)
+        ? EmptyState(message: context.tr('No flags in this ward.'), pictogram: PictogramKind.warranty)
         : Column(
             children: [
               for (final (i, f) in flags.cast<Map<String, dynamic>>().indexed)
@@ -430,7 +440,7 @@ class _TopFlags extends ConsumerWidget {
                     title: '${f['road_name'] ?? f['road_id']}',
                     caption: '${f['work_order_id']} · ${'${f['contractor_name']}'.replaceAll(' (synthetic)', '')}',
                     leading: _FlagWell(flagTone('${f['type']}')),
-                    chip: StatusChip(flagShortLabels[f['type']] ?? flagLabel('${f['type']}'), tone: flagTone('${f['type']}')),
+                    chip: StatusChip(context.tr(flagShortLabels[f['type']] ?? flagLabel('${f['type']}')), tone: flagTone('${f['type']}')),
                     amount: formatInr(f['cost_inr'] as num? ?? 0),
                     divider: i < flags.length - 1,
                     onTap: () => openRoad(f['road_id'] as String, wo: f['work_order_id'] as String),
@@ -474,20 +484,35 @@ class _Tools extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) => Gutter(
     child: TileGrid(
       tiles: [
-        Tile(label: 'Next rupee', pictogram: PictogramKind.nextRupee, size: TileSize.wide, onTap: () => showNextRupee(ref, ward), semanticLabel: kNextRupeeAction),
-        Tile(label: 'Complaint trail', pictogram: PictogramKind.trail, size: TileSize.wide, onTap: () => openTrail(ward)),
-        Tile(label: 'Money trail', pictogram: PictogramKind.ward, onTap: () => openWard(ward), semanticLabel: 'Ward $ward money trail'),
         Tile(
-          label: 'Contractors',
+          label: context.tr('Next rupee'),
+          pictogram: PictogramKind.nextRupee,
+          size: TileSize.wide,
+          onTap: () => showNextRupee(ref, ward),
+          semanticLabel: context.tr(kNextRupeeAction),
+        ),
+        Tile(label: context.tr('Complaint trail'), pictogram: PictogramKind.trail, size: TileSize.wide, onTap: () => openTrail(ward)),
+        Tile(
+          label: context.tr('Money trail'),
+          pictogram: PictogramKind.ward,
+          onTap: () => openWard(ward),
+          semanticLabel: context.tr('Ward {w} money trail', {'w': ward}),
+        ),
+        Tile(
+          label: context.tr('Contractors'),
           pictogram: PictogramKind.contractors,
-          onTap: () => pushPanel(PanelPage('$kContractorsInWard · Ward $ward', ScorecardList(ward: ward))),
+          onTap: () => pushPanel(PanelPage('${context.tr(kContractorsInWard)} · ${context.tr('Ward {w}', {'w': ward})}', ScorecardList(ward: ward))),
         ),
         brief
-            ? Tile(label: kWardBrief, pictogram: PictogramKind.brief, onTap: () => showWardBrief(context, ward))
-            : Tile(label: kAskWard, pictogram: PictogramKind.ask, onTap: () => pushPanel(PanelPage(kAskWard, AskWardPage(ward: ward)))),
-        Tile(label: 'Report card', pictogram: PictogramKind.reportCard, onTap: () => pushPanel(PanelPage(kReportCard, ReportCardPage(ward: ward)))),
-        Tile(label: 'Map', pictogram: PictogramKind.map, onTap: () => goTab(_mapTab)),
-        Tile(label: 'About', pictogram: PictogramKind.about, onTap: () => appRouter.push('/about')),
+            ? Tile(label: context.tr(kWardBrief), pictogram: PictogramKind.brief, onTap: () => showWardBrief(context, ward))
+            : Tile(label: context.tr(kAskWard), pictogram: PictogramKind.ask, onTap: () => pushPanel(PanelPage(kAskWard, AskWardPage(ward: ward)))),
+        Tile(
+          label: context.tr('Report card'),
+          pictogram: PictogramKind.reportCard,
+          onTap: () => pushPanel(PanelPage(kReportCard, ReportCardPage(ward: ward))),
+        ),
+        Tile(label: context.tr('Map'), pictogram: PictogramKind.map, onTap: () => goTab(_mapTab)),
+        Tile(label: context.tr('About'), pictogram: PictogramKind.about, onTap: () => appRouter.push('/about')),
       ],
     ),
   );
@@ -505,7 +530,7 @@ class _BudgetHero extends ConsumerWidget {
     child: _block(
       ref.watch(wardDetailProvider(ward)),
       skeleton: _heroSkeleton(),
-      error: 'Could not load ward $ward.',
+      error: context.tr('Could not load ward {w}.', {'w': ward}),
       onRetry: () => ref.invalidate(wardDetailProvider(ward)),
       data: (w) {
         final budget = w['budget'] as num? ?? 0;
@@ -513,14 +538,15 @@ class _BudgetHero extends ConsumerWidget {
         final over = spend - budget;
         return Gutter(
           child: HeroFigure(
-            caption: 'Ward $ward road budget',
+            caption: context.tr('Ward {w} road budget', {'w': ward}),
             value: spend,
             format: formatInr,
-            explanation: 'spent of ${formatInr(budget)} · ${over > 0 ? '${formatInr(over)} over budget' : '${formatInr(-over)} left'}',
+            explanation: '${context.tr('spent of {budget}', {'budget': formatInr(budget)})} · '
+                '${over > 0 ? context.tr('{amount} over budget', {'amount': formatInr(over)}) : context.tr('{amount} left', {'amount': formatInr(-over)})}',
             onTap: () => openWard(ward),
             action: ProgressBar(
               value: budget <= 0 ? 1 : spend / budget,
-              semanticLabel: 'Spent ${formatInr(spend)} of ${formatInr(budget)}',
+              semanticLabel: context.tr('Spent {spend} of {budget} budget', {'spend': formatInr(spend), 'budget': formatInr(budget)}),
             ),
           ),
         );
@@ -567,12 +593,12 @@ class _Contractors extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) => _block(
     ref.watch(scorecardsProvider(ward)),
     skeleton: Gutter(child: Skeleton.tiles(count: 2, height: 132)),
-    error: 'Could not load contractors.',
+    error: context.tr('Could not load contractors.'),
     onRetry: () => ref.invalidate(scorecardsProvider(ward)),
     data: (sc) {
       final rows = [...?(sc['contractors'] as List?)].cast<Map<String, dynamic>>().where((r) => r['rated'] == true).toList();
       if (rows.isEmpty) {
-        return const EmptyState(message: 'No contractor has enough jobs here to be rated yet.', pictogram: PictogramKind.contractors);
+        return EmptyState(message: context.tr('No contractor has enough jobs here to be rated yet.'), pictogram: PictogramKind.contractors);
       }
       return SingleChildScrollView(
         scrollDirection: Axis.horizontal,
@@ -607,7 +633,11 @@ class _ContractorCard extends StatelessWidget {
     final m = (row['measures'] as Map?) ?? const {};
     double v(String k) => ((m[k] as Map?)?['value'] as num?)?.toDouble() ?? 0;
     // Each bar is "how good": share on time, share that held, share at or under the rate card.
-    final bars = [('Speed', v('speed'), 'on time'), ('Durability', 1 - v('durability'), 'held 30 days'), ('Pricing', 1 - v('pricing'), 'within rate')];
+    final bars = [
+      (context.tr('Speed'), v('speed'), context.tr('on time')),
+      (context.tr('Durability'), 1 - v('durability'), context.tr('held 30 days')),
+      (context.tr('Pricing'), 1 - v('pricing'), context.tr('within rate')),
+    ];
     return SizedBox(
       width: width,
       child: Pressable(
@@ -622,7 +652,7 @@ class _ContractorCard extends StatelessWidget {
           children: [
             Text('${row['name']}'.replaceAll(' (synthetic)', ''), style: t.bodyStrong, maxLines: 2, overflow: TextOverflow.ellipsis),
             const SizedBox(height: AppSpacing.s4),
-            Text('${formatInr(row['spend'] as num? ?? 0)} · ${row['jobs']} jobs', style: t.caption),
+            Text('${formatInr(row['spend'] as num? ?? 0)} · ${context.tr('{n} jobs', {'n': row['jobs']})}', style: t.caption),
             const Spacer(),
             const SizedBox(height: AppSpacing.s12),
             Row(
