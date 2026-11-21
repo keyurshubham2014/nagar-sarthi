@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -139,7 +141,13 @@ class StatTile extends StatelessWidget {
             const SizedBox(height: AppSpacing.s4),
             Row(
               children: [
-                Flexible(child: Text(label, style: t.caption)),
+                Flexible(
+                  child: switch (_StatTileWidth.maybeOf(context)) {
+                    // Tile width less its padding (and the dot), so a long word shrinks instead of breaking.
+                    final w? => WordSafeText(label, style: t.caption, maxWidth: w - 2 * AppSpacing.s14 - (dot == null ? 0 : 12)),
+                    null => Text(label, style: t.caption),
+                  },
+                ),
                 if (dot != null) ...[
                   const SizedBox(width: 6),
                   Container(width: 6, height: 6, decoration: BoxDecoration(color: dot, shape: BoxShape.circle)),
@@ -158,17 +166,31 @@ class StatRow extends StatelessWidget {
   const StatRow({super.key, required this.tiles});
   final List<Widget> tiles;
   @override
-  Widget build(BuildContext context) => IntrinsicHeight(
-    child: Row(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        for (var i = 0; i < tiles.length; i++) ...[
-          if (i > 0) const SizedBox(width: AppSpacing.tileGap),
-          Expanded(child: tiles[i]),
-        ],
-      ],
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, box) => _StatTileWidth(
+      width: (box.maxWidth - AppSpacing.tileGap * (tiles.length - 1)) / math.max(1, tiles.length),
+      child: IntrinsicHeight(
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            for (var i = 0; i < tiles.length; i++) ...[
+              if (i > 0) const SizedBox(width: AppSpacing.tileGap),
+              Expanded(child: tiles[i]),
+            ],
+          ],
+        ),
+      ),
     ),
   );
+}
+
+/// Width of each tile in a [StatRow] (labels measure against it; no LayoutBuilder under IntrinsicHeight).
+class _StatTileWidth extends InheritedWidget {
+  const _StatTileWidth({required this.width, required super.child});
+  final double width;
+  static double? maybeOf(BuildContext context) => context.dependOnInheritedWidgetOfExactType<_StatTileWidth>()?.width;
+  @override
+  bool updateShouldNotify(_StatTileWidth old) => old.width != width;
 }
 
 /// Bold section heading (headline 24/700), 32 above and 12 below, optional

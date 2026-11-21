@@ -108,7 +108,7 @@ class Tile extends StatelessWidget {
                 alignment: AlignmentDirectional.bottomStart,
                 child: Padding(
                   padding: EdgeInsetsDirectional.only(end: square ? 0 : 44),
-                  child: Text(
+                  child: WordSafeText(
                     label,
                     style: square ? t.label.copyWith(fontSize: 13, height: 17 / 13) : t.label.copyWith(fontSize: 15),
                     maxLines: 2,
@@ -140,7 +140,12 @@ class TileGrid extends StatelessWidget {
       final wide = tiles.where((t) => t.size == TileSize.wide).toList();
       // Two wide tiles always share one row; more reflow to 4 per row when wide.
       final wideCols = box.maxWidth >= 640 && wide.length > 2 ? 4 : 2;
-      final squareCols = squareColumns ?? _squareCols(box.maxWidth);
+      // Large text: fewer, wider square tiles, so two-line labels still fit (min 96 dp at 100%).
+      final minSquare = 96 * MediaQuery.textScalerOf(context).scale(14) / 14;
+      var squareCols = squareColumns ?? _squareCols(box.maxWidth);
+      while (squareCols > 2 && (box.maxWidth - gap * (squareCols - 1)) / squareCols < minSquare) {
+        squareCols--;
+      }
       final rows = <Widget>[];
       void addRow(List<Tile> items, int cols) {
         for (var i = 0; i < items.length; i += cols) {
@@ -318,7 +323,7 @@ class ListRow extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Text(title, style: t.bodyStrong, maxLines: titleMaxLines, overflow: TextOverflow.ellipsis),
+                  WordSafeText(title, style: t.bodyStrong, maxLines: titleMaxLines, overflow: TextOverflow.ellipsis),
                   if (caption != null) Text(caption!, style: t.caption, maxLines: 2, overflow: TextOverflow.ellipsis),
                   if (chip != null) ...[const SizedBox(height: AppSpacing.s4), chip!],
                 ],
@@ -695,4 +700,44 @@ class _CollapsiblePanelState extends State<CollapsiblePanel> {
       ),
     );
   }
+}
+
+/// Text that never breaks inside a word. When its widest word does not fit the
+/// line (large text scale on a narrow phone) it scales itself down just enough,
+/// to no less than 75%, instead. Measures against [maxWidth], or the incoming
+/// constraints (a LayoutBuilder, so not inside IntrinsicHeight) without it.
+class WordSafeText extends StatelessWidget {
+  const WordSafeText(this.text, {super.key, required this.style, this.maxLines, this.overflow, this.maxWidth, this.textAlign});
+  final String text;
+  final TextAlign? textAlign;
+  final TextStyle style;
+  final int? maxLines;
+  final TextOverflow? overflow;
+  final double? maxWidth;
+
+  Widget _text(BuildContext context, double width) {
+    final scaler = MediaQuery.textScalerOf(context);
+    var widest = 0.0;
+    for (final w in text.split(RegExp(r'\s+'))) {
+      if (w.isEmpty) continue;
+      final tp = TextPainter(text: TextSpan(text: w, style: style), textDirection: Directionality.of(context), textScaler: scaler)
+        ..layout();
+      widest = math.max(widest, tp.width);
+      tp.dispose();
+    }
+    final k = widest > width && width > 0 ? math.max(0.75, width / widest) : 1.0;
+    return Text(
+      text,
+      style: style,
+      maxLines: maxLines,
+      overflow: overflow,
+      textAlign: textAlign,
+      textScaler: k == 1 ? null : TextScaler.linear(scaler.scale(style.fontSize ?? 14) / (style.fontSize ?? 14) * k),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) => maxWidth != null
+      ? _text(context, maxWidth!)
+      : LayoutBuilder(builder: (context, box) => _text(context, box.maxWidth.isFinite ? box.maxWidth : double.infinity));
 }

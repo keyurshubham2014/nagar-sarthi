@@ -90,12 +90,17 @@ class _AccountSheet extends ConsumerWidget {
         ListRow(
           title: context.tr('Language'),
           icon: Icons.translate,
-          trailing: SizedBox(
-            width: 168,
-            child: SegmentedControl<String>(
-              segments: const [('en', 'EN'), ('hi', 'हिं'), ('mr', 'मरा')],
-              value: context.lang,
-              onChanged: (l) => ref.read(langProvider.notifier).set(l),
+          chevron: false,
+          // Under the title, so the label keeps its full width at large text sizes.
+          chip: Padding(
+            padding: const EdgeInsets.only(top: AppSpacing.s4),
+            child: SizedBox(
+              width: 200,
+              child: SegmentedControl<String>(
+                segments: const [('en', 'EN'), ('hi', 'हिं'), ('mr', 'मरा')],
+                value: context.lang,
+                onChanged: (l) => ref.read(langProvider.notifier).set(l),
+              ),
             ),
           ),
         ),

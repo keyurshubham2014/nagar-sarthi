@@ -669,7 +669,12 @@ class _ChoiceGrid extends StatelessWidget {
   @override
   Widget build(BuildContext context) => LayoutBuilder(
     builder: (context, box) {
-      final cols = columns ?? (box.maxWidth >= 560 ? 5 : 3);
+      var cols = columns ?? (box.maxWidth >= 560 ? 5 : 3);
+      // Large text on a narrow phone: two per row so labels keep whole words.
+      final minTile = 96 * MediaQuery.textScalerOf(context).scale(14) / 14;
+      while (cols > 2 && (box.maxWidth - AppSpacing.tileGap * (cols - 1)) / cols < minTile) {
+        cols--;
+      }
       return Column(
         children: [
           for (var i = 0; i < children.length; i += cols) ...[
@@ -724,7 +729,7 @@ class _ChoiceTile extends StatelessWidget {
             ),
             Align(
               alignment: AlignmentDirectional.bottomStart,
-              child: Text(
+              child: WordSafeText(
                 label,
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,

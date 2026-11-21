@@ -216,17 +216,23 @@ class EvidenceTable extends StatelessWidget {
         for (final e in evidence.entries)
           Padding(
             padding: const EdgeInsets.symmetric(vertical: AppSpacing.s4),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(
-                  child: Text(evidenceLabels[e.key] ?? '${e.key}'.replaceAll('_', ' '),
-                      style: t.bodySmall?.copyWith(color: c.textSecondary)),
-                ),
-                const SizedBox(width: AppSpacing.s8),
-                Expanded(child: Text(formatEvidence('${e.key}', e.value), style: t.bodySmall?.copyWith(color: c.textPrimary, fontWeight: FontWeight.w500), textAlign: TextAlign.end)),
-              ],
-            ),
+            child: () {
+              final label = Text(evidenceLabels[e.key] ?? '${e.key}'.replaceAll('_', ' '), style: t.bodySmall?.copyWith(color: c.textSecondary));
+              final value = formatEvidence('${e.key}', e.value);
+              final style = t.bodySmall?.copyWith(color: c.textPrimary, fontWeight: FontWeight.w500);
+              // A long value (a list of ids) goes under its label at full width, so ids never split.
+              if (value.length > 24) {
+                return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [label, Text(value, style: style)]);
+              }
+              return Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(child: label),
+                  const SizedBox(width: AppSpacing.s8),
+                  Expanded(child: WordSafeText(value, style: style ?? context.type.caption, textAlign: TextAlign.end)),
+                ],
+              );
+            }(),
           ),
       ],
     );

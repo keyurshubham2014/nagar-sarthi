@@ -359,7 +359,7 @@ class FlagRow extends StatelessWidget {
         children: [
           StatusChip(flagShortLabels[type] ?? type, tone: flagTone(type), more: more),
           const SizedBox(height: AppSpacing.s4),
-          Text(flagReason(f), style: t.caption.copyWith(color: c.textPrimary), maxLines: 2, overflow: TextOverflow.ellipsis),
+          Text(flagReason(f), style: t.caption.copyWith(color: c.textPrimary), maxLines: 3, overflow: TextOverflow.ellipsis),
         ],
       ),
       amount: formatInr(f['cost_inr'] as num? ?? 0),
