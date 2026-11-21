@@ -1,4 +1,87 @@
-# Follow the Rupee: Mumbai Monsoon Roads 🌧️💰
+# Nagar Sarthi
+
+Nagar Sarthi ("the city's guide") follows Mumbai's monsoon road-repair money from complaint to work order to road, and shows where it did not add up.
+
+> **All data here is synthetic. The contractors are fictional. This is not a BMC product** and does not use BMC data. It was built at Claude Impact Lab Mumbai on the organisers' made-up dataset (described below). Do not use it to judge any real person, contractor or department.
+
+## What it found
+
+Across 2,499 repair jobs in the 2025 monsoon season (figures from `engine/out/audit.json`):
+
+- **Spend vs budget:** ₹13.43 crore spent against a ₹14.91 crore budget city-wide; 6 of 24 wards went over their own budget.
+- **Billed on roads under warranty:** ₹2.62 crore across 493 jobs, on roads still inside their Defect Liability Period. To be claimed and verified.
+- **Repairs that failed within 30 days:** 611 jobs (₹3.07 crore) were re-opened within a month.
+- **Billed above 1.5x the rate card:** 109 jobs (₹1.12 crore).
+- **Repeat jobs with no complaint linked:** 45 jobs (₹25.9 lakh) billed within 5 days of the same repair on the same road, with no complaint behind them.
+
+Each of these is "needs review" or "to be claimed and verified", not a finding of wrongdoing.
+
+## What it does
+
+**Ward officer**
+- A money map: tap a ward for its spend, budget and flags, tap a road for every job and the evidence behind each flag.
+- Drafts a recovery notice for a job billed under warranty or above the rate card.
+- A "next rupee" list: where the ward should spend next, with the score parts shown.
+
+**Corporator**
+- Fair contractor scorecards (speed, how long repairs held, pricing), adjusted for repair method, with the work orders behind every number.
+- A one-page ward brief in English, Hindi or Marathi.
+
+**Citizen**
+- Report a problem in your own words (English, Hindi, Marathi or Hinglish); it finds neighbours who already reported it and the work order that followed.
+- Track a complaint from report to repair, and whether the fix held.
+- Share a ward report card, and ask questions about your ward.
+
+Also: "play the monsoon", a time slider over the season with complaints and failed repairs on the map.
+
+## How it works
+
+- **Rules in code for every flag.** A Python script (`engine/audit.py`, standard library only) reads `data/` and writes `engine/out/audit.json`. The same data always gives the same flags, scores and totals.
+- **Claude for language only:** recovery notices, ward briefs, understanding a citizen's complaint, and answering questions. Claude never decides a flag or a number.
+- **Every Claude feature has a saved fallback.** If there is no API key or no network, the server answers from `server/fallbacks/` and the app marks it as a saved draft.
+
+**Built with:** Flutter (Android and web), Node.js (Express), Postgres, Python standard library, Claude.
+
+## Run it
+
+Everything runs on the laptop; nothing is deployed. Needs Python 3, Docker Desktop, Node 20.12+ and Flutter.
+
+1. **Engine** (writes `engine/out/audit.json`; re-run after data changes, then restart the server):
+   ```bash
+   python3 engine/audit.py
+   ```
+2. **Postgres** (container `nagar-sarthi-db`, host port **5435**, tables created by `infra/init.sql` on first start):
+   ```bash
+   docker compose -f infra/docker-compose.yml up -d --wait
+   docker exec nagar-sarthi-db psql -U nagar -d nagar_sarthi -c '\dt'
+   ```
+3. **Server** (http://localhost:8787; read endpoints work even if Postgres is down):
+   ```bash
+   cd server
+   cp .env.example .env          # then put your ANTHROPIC_API_KEY in .env (never commit it)
+   npm install
+   npm start
+   curl localhost:8787/api/health
+   ```
+   Without a key, `POST /api/claude/:feature` answers from `server/fallbacks/<feature>.json` with `"source":"fallback"`.
+4. **App in Chrome**:
+   ```bash
+   cd app
+   flutter run -d chrome
+   ```
+5. **App on the Android emulator** (the emulator reaches the laptop at `10.0.2.2`):
+   ```bash
+   flutter emulators --launch <emulator_id>
+   cd app
+   flutter run -d emulator-5554
+   ```
+   Point the app at another server with `--dart-define=API_BASE=http://<host>:8787`.
+
+---
+
+# About the dataset (from the organisers)
+
+## Follow the Rupee: Mumbai Monsoon Roads 🌧️💰
 
 **The dataset and challenge for Claude Impact Lab Mumbai**
 Saturday, 21 November 2026 · ATLAS SkillTech University, Mumbai · Theme: accountability and budgeting
@@ -129,38 +212,3 @@ Organised by **Sumeet Doshi**, Claude Community Ambassador, Anthropic
 ## License
 
 Data and docs released under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).
-
-## Running Nagar Sarthi
-
-Everything runs on the laptop; nothing is deployed. Needs Python 3, Docker Desktop, Node 20.12+ and Flutter.
-
-1. **Engine** (writes `engine/out/audit.json`; re-run after data changes, then restart the server):
-   ```bash
-   python3 engine/audit.py
-   ```
-2. **Postgres** (container `nagar-sarthi-db`, host port **5435**, tables created by `infra/init.sql` on first start):
-   ```bash
-   docker compose -f infra/docker-compose.yml up -d --wait
-   docker exec nagar-sarthi-db psql -U nagar -d nagar_sarthi -c '\dt'
-   ```
-3. **Server** (http://localhost:8787; read endpoints work even if Postgres is down):
-   ```bash
-   cd server
-   cp .env.example .env          # then put your ANTHROPIC_API_KEY in .env (never commit it)
-   npm install
-   npm start
-   curl localhost:8787/api/health
-   ```
-   Without a key, `POST /api/claude/:feature` answers from `server/fallbacks/<feature>.json` with `"source":"fallback"`.
-4. **App in Chrome**:
-   ```bash
-   cd app
-   flutter run -d chrome
-   ```
-5. **App on the Android emulator** (the emulator reaches the laptop at `10.0.2.2`):
-   ```bash
-   flutter emulators --launch <emulator_id>
-   cd app
-   flutter run -d emulator-5554
-   ```
-   Point the app at another server with `--dart-define=API_BASE=http://<host>:8787`.
