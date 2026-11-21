@@ -7,6 +7,7 @@ import { dbStatus } from './db.js';
 import { relay } from './claude.js';
 import { scorecards, contractorWorkOrders } from './scorecards.js';
 import { errorHandler, notFound, badRequest } from './errors.js';
+import { login, seedUsers, session, needUser, needRole } from './auth.js';
 import { compactTimeline, complaintsHeat } from './timeline.js';
 import { localities, understand, findMatches, localityByName, createComplaint, complaintDetail, complaintsAt } from './citizen.js';
 
@@ -21,6 +22,7 @@ app.use((req, res, next) => {
   res.on('finish', () => console.log(`${req.method} ${req.originalUrl} ${res.statusCode} ${Date.now() - t}ms`));
   next();
 });
+app.use(session);
 
 const lookup = (table, id, what) => {
   if (!Object.hasOwn(table, id)) throw notFound(what);
@@ -30,6 +32,14 @@ const lookup = (table, id, what) => {
 app.get('/api/health', async (_req, res) => {
   const db = await dbStatus();
   res.json({ ok: true, audit_generated_at: audit.meta.generated_at, db });
+});
+
+// Sign-in: {phone, code} -> {token, role, ward_code, phone}; 401 on a wrong code.
+app.post('/api/auth/login', async (req, res) => res.json(await login(req.body ?? {})));
+// Demo shortcuts only: the code from config, so the app never hardcodes it. 404 when DEMO_SHORTCUTS=off.
+app.get('/api/auth/demo', (_req, res) => {
+  if (!config.demoShortcuts) throw notFound('Demo sign-in');
+  res.json({ code: config.demoLoginCode, users: { citizen: '9000000001', corporator: '9000000002', officer: '9000000003' } });
 });
 
 app.get('/api/meta', (_req, res) => res.json(audit.meta));
@@ -130,8 +140,9 @@ app.get('/api/localities', (_req, res) => {
 
 // File a complaint (validated; 400 with fields, 503 when Postgres is down).
 app.post('/api/complaints', async (req, res) => {
+  const user = needUser(req, 'file a complaint');
   const b = req.body && typeof req.body === 'object' && !Array.isArray(req.body) ? req.body : {};
-  res.status(201).json(await createComplaint(audit, b));
+  res.status(201).json(await createComplaint(audit, b, user.uid));
 });
 
 // Track: ?locality= lists, /:id gives the full trail. After /heat so that route still matches.
@@ -153,6 +164,8 @@ app.post('/api/claude/intake', async (req, res) => {
 });
 
 app.post('/api/claude/:feature', async (req, res) => {
+  // Checked here, not on a separate route, so no spelling of the path can skip it.
+  if (req.params.feature.toLowerCase() === 'notice') needRole(req, 'officer', 'draft a recovery notice');
   res.json(await relay(req.params.feature, req.body ?? {}, audit));
 });
 
@@ -164,5 +177,8 @@ app.listen(config.port, async () => {
   console.log(`Claude: ${anthropicKey() ? 'key present' : 'no key, fallbacks only'}, model ${config.claudeModel}`);
   const db = await dbStatus();
   if (!db.ok) console.warn(`[db] Postgres not ready (${db.error ?? `tables: ${db.tables.join(',')}`}); read endpoints still work`);
-  else console.log('[db] Postgres ok, tables:', db.tables.join(', '));
+  else {
+    console.log('[db] Postgres ok, tables:', db.tables.join(', '));
+    await seedUsers().catch((e) => console.warn('[auth] could not seed demo users:', e.message));
+  }
 });

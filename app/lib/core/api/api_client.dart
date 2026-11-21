@@ -2,6 +2,8 @@ import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../auth/session.dart';
+
 /// `--dart-define=API_BASE=http://host:8787` overrides the default.
 const String _apiBaseDefine = String.fromEnvironment('API_BASE');
 
@@ -37,7 +39,7 @@ class ClaudeReply {
 /// Thin client over the Nagar Sarthi API. Responses stay as decoded JSON
 /// maps and lists; screens read the fields they need.
 class ApiClient {
-  ApiClient({Dio? dio})
+  ApiClient({Dio? dio, this.token, this.onUnauthorized})
     : _dio =
           dio ??
           Dio(
@@ -47,9 +49,25 @@ class ApiClient {
               // Claude relay waits up to 20 s server-side before falling back.
               receiveTimeout: const Duration(seconds: 30),
             ),
-          );
+          ) {
+    _dio.interceptors.add(
+      InterceptorsWrapper(
+        onRequest: (o, h) {
+          final t = token?.call();
+          if (t != null) o.headers['Authorization'] = 'Bearer $t';
+          h.next(o);
+        },
+      ),
+    );
+  }
 
   final Dio _dio;
+
+  /// Current session token, sent as a Bearer header on every call.
+  final String? Function()? token;
+
+  /// Called when the server rejects the session (401 on a call that sent a token).
+  final void Function()? onUnauthorized;
 
   Future<T> _get<T>(String path) => _call(() => _dio.get<T>(path));
 
@@ -62,6 +80,11 @@ class ApiClient {
           ? data['error']['message'] as String?
           : null;
       final fields = data is Map && data['error'] is Map ? data['error']['fields'] : null;
+      if (e.response?.statusCode == 401 &&
+          e.requestOptions.headers.containsKey('Authorization') &&
+          e.requestOptions.path != '/api/auth/login') {
+        onUnauthorized?.call();
+      }
       throw ApiException(
         serverMsg ?? 'Could not reach the Nagar Sarthi server at $apiBase',
         status: e.response?.statusCode,
@@ -71,6 +94,13 @@ class ApiClient {
   }
 
   Future<Map<String, dynamic>> health() => _get('/api/health');
+
+  /// Sign in: {token, role, ward_code, phone}; 401 on a wrong code, 400 with fields.
+  Future<Map<String, dynamic>> login(String phone, String code) =>
+      _call(() => _dio.post('/api/auth/login', data: {'phone': phone, 'code': code}));
+
+  /// Demo shortcuts: {code, users:{role: phone}} from server config; 404 when turned off.
+  Future<Map<String, dynamic>> demoLogin() => _get('/api/auth/demo');
   Future<Map<String, dynamic>> meta() => _get('/api/meta');
 
   /// Shading values per ward: code, name, spend, flagged_inr, flagged_share...
@@ -147,4 +177,9 @@ class ApiClient {
   }
 }
 
-final apiClientProvider = Provider<ApiClient>((ref) => ApiClient());
+final apiClientProvider = Provider<ApiClient>(
+  (ref) => ApiClient(
+    token: () => ref.read(sessionProvider)?.token,
+    onUnauthorized: () => ref.read(sessionProvider.notifier).expired(),
+  ),
+);

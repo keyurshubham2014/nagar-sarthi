@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/map/civic_map.dart';
+import '../auth/sign_in_screen.dart';
 import '../../core/flag_strings.dart';
 import '../../core/theme/tokens.dart';
 import '../citizen/citizen_panels.dart';
@@ -104,6 +105,7 @@ class _MapHomeScreenState extends ConsumerState<MapHomeScreen> with WidgetsBindi
       appBar: AppBar(
         title: const Text('Nagar Sarthi'),
         actions: [
+          const RoleMenu(),
           IconButton(
             tooltip: kScorecardsTitle,
             icon: const Icon(Icons.fact_check_outlined),

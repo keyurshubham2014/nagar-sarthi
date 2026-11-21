@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/auth/session.dart';
 import '../../core/flag_strings.dart';
 import '../../core/format.dart';
 import '../../core/theme/tokens.dart';
@@ -24,13 +25,19 @@ void openRoadPanel(BuildContext context, String id, String name) =>
 
 /// Recovery notice for one flag type on a road or across a ward. The server
 /// picks the flag rows; the client sends only the scope.
-void showNoticeSheet(BuildContext context, {required String type, String? roadId, String? wardCode}) =>
-    showClaudeDraftSheet(
-      context,
-      title: 'Recovery notice',
-      feature: 'notice',
-      body: {'flag_type': type, 'road_id': ?roadId, 'ward_code': ?wardCode},
-    );
+Future<void> showNoticeSheet(BuildContext context, {required String type, String? roadId, String? wardCode}) async {
+  if (!await ensureRole(context, roles: {'officer'}, why: 'Recovery notices are drafted by the ward officer. Sign in as a ward officer to draft one.')) return;
+  if (!context.mounted) return;
+  await showClaudeDraftSheet(
+    context,
+    title: 'Recovery notice',
+    feature: 'notice',
+    body: {'flag_type': type, 'road_id': ?roadId, 'ward_code': ?wardCode},
+  );
+}
+
+/// Officer actions show for officers, and for signed-out visitors (who get a sign-in prompt on tap).
+bool canDraftNotice(String? role) => role == null || role == 'officer';
 
 Color flagColor(String type) => roadStatusColors[type] ?? const Color(0xFF8D6E63);
 
@@ -54,6 +61,7 @@ class WardPanel extends ConsumerWidget {
   );
 
   Widget _body(BuildContext context, WidgetRef ref, Json w) {
+    final role = ref.watch(sessionProvider)?.role;
     final c = SaartheeColors.of(context);
     final t = Theme.of(context).textTheme;
     final budget = w['budget'] as num? ?? 0;
@@ -123,7 +131,7 @@ class WardPanel extends ConsumerWidget {
                 .read(panelProvider.notifier)
                 .push(PanelPage('${flagLabel(type)} · Ward $code', WardFlagList(ward: code, type: type))),
           ),
-          if (noticeFlagTypes.contains(type))
+          if (noticeFlagTypes.contains(type) && canDraftNotice(role))
             Align(
               alignment: Alignment.centerLeft,
               child: Padding(
@@ -138,28 +146,49 @@ class WardPanel extends ConsumerWidget {
         ],
         if (types.isNotEmpty) Text(kFlagsOverlap, style: t.bodySmall?.copyWith(color: c.textSecondary)),
         const SizedBox(height: AppSpacing.s16),
-        FilledButton.icon(
-          onPressed: () => showNextRupee(ref, code),
-          icon: const Icon(Icons.place_outlined),
-          label: const Text(kNextRupeeAction),
-        ),
-        const SizedBox(height: AppSpacing.s8),
+        if (role != 'citizen') ...[
+          FilledButton.icon(
+            onPressed: () => showNextRupee(ref, code),
+            icon: const Icon(Icons.place_outlined),
+            label: const Text(kNextRupeeAction),
+          ),
+          const SizedBox(height: AppSpacing.s8),
+        ],
+        // The corporator's tools come first and filled.
+        if (role == 'corporator') ...[
+          FilledButton.icon(
+            onPressed: () => showWardBrief(context, code),
+            icon: const Icon(Icons.description_outlined),
+            label: const Text(kWardBrief),
+          ),
+          const SizedBox(height: AppSpacing.s8),
+          FilledButton.tonalIcon(
+            onPressed: () => ref
+                .read(panelProvider.notifier)
+                .push(PanelPage('$kContractorsInWard · Ward $code', ScorecardList(ward: code))),
+            icon: const Icon(Icons.fact_check_outlined),
+            label: const Text(kContractorsInWard),
+          ),
+          const SizedBox(height: AppSpacing.s8),
+        ],
         Wrap(
           spacing: AppSpacing.s8,
           runSpacing: AppSpacing.s8,
           children: [
-            OutlinedButton.icon(
-              onPressed: () => showWardBrief(context, code),
-              icon: const Icon(Icons.description_outlined),
-              label: const Text(kWardBrief),
-            ),
-            OutlinedButton.icon(
-              onPressed: () => ref
-                  .read(panelProvider.notifier)
-                  .push(PanelPage('$kContractorsInWard · Ward $code', ScorecardList(ward: code))),
-              icon: const Icon(Icons.fact_check_outlined),
-              label: const Text(kContractorsInWard),
-            ),
+            if (role != 'corporator') ...[
+              OutlinedButton.icon(
+                onPressed: () => showWardBrief(context, code),
+                icon: const Icon(Icons.description_outlined),
+                label: const Text(kWardBrief),
+              ),
+              OutlinedButton.icon(
+                onPressed: () => ref
+                    .read(panelProvider.notifier)
+                    .push(PanelPage('$kContractorsInWard · Ward $code', ScorecardList(ward: code))),
+                icon: const Icon(Icons.fact_check_outlined),
+                label: const Text(kContractorsInWard),
+              ),
+            ],
             OutlinedButton.icon(
               onPressed: () => ref.read(panelProvider.notifier).push(PanelPage(kReportCard, ReportCardPage(ward: code))),
               icon: const Icon(Icons.ios_share),
@@ -209,7 +238,7 @@ class WardFlagList extends ConsumerWidget {
         return PanelList(
           children: [
             Text('${flags.length} work orders · ${flagStanding(type)}', style: Theme.of(context).textTheme.bodyMedium),
-            if (noticeFlagTypes.contains(type)) ...[
+            if (noticeFlagTypes.contains(type) && canDraftNotice(ref.watch(sessionProvider)?.role)) ...[
               const SizedBox(height: AppSpacing.s8),
               FilledButton.icon(
                 onPressed: () => showNoticeSheet(context, type: type, wardCode: ward),
@@ -276,16 +305,19 @@ class RoadPanel extends ConsumerWidget {
       return PanelMessage.error('Could not load this road.\n${road.error ?? flags.error}', onRetry: retry);
     }
     if (!road.hasValue || !flags.hasValue) return const PanelMessage.loading();
-    return _body(context, road.requireValue, flags.requireValue);
+    return _body(context, road.requireValue, flags.requireValue, canDraftNotice(ref.watch(sessionProvider)?.role));
   }
 
-  Widget _body(BuildContext context, Json r, List<dynamic> flags) {
+  Widget _body(BuildContext context, Json r, List<dynamic> flags, bool canNotice) {
     final c = SaartheeColors.of(context);
     final t = Theme.of(context).textTheme;
     final status = r['status'] as String? ?? 'clean';
     final wos = [...(r['work_orders'] as List? ?? const [])]
       ..sort((a, b) => '${a['assigned_at']}'.compareTo('${b['assigned_at']}'));
-    final noticeTypes = [for (final k in flagOrder) if (noticeFlagTypes.contains(k) && flags.any((f) => f['type'] == k)) k];
+    final noticeTypes = [
+      if (canNotice)
+        for (final k in flagOrder) if (noticeFlagTypes.contains(k) && flags.any((f) => f['type'] == k)) k,
+    ];
     Json? flagFor(String wo, String type) =>
         flags.cast<Json?>().firstWhere((f) => f!['work_order_id'] == wo && f['type'] == type, orElse: () => null);
 

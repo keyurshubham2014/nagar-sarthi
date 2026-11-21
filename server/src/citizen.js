@@ -213,7 +213,7 @@ const dbDown = (e) => {
   return new ApiError(503, 'db_unavailable', 'Complaints cannot be reached right now because the database is down. Please try again.');
 };
 
-export async function createComplaint(audit, b) {
+export async function createComplaint(audit, b, userId = null) {
   const fields = {};
   if (!CATEGORIES.includes(b.category)) fields.category = 'Pick one of the listed categories';
   const loc = localityByName(b.locality);
@@ -228,9 +228,9 @@ export async function createComplaint(audit, b) {
   if (Object.keys(fields).length) throw fieldError(fields);
   try {
     const { rows } = await pool.query(
-      `INSERT INTO complaints (ward_code, locality, category, description, language, matched_complaint_id)
-       VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, created_at, status`,
-      [loc.ward_code, loc.locality, b.category, description, b.language, m ?? null],
+      `INSERT INTO complaints (user_id, ward_code, locality, category, description, language, matched_complaint_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id, created_at, status`,
+      [userId, loc.ward_code, loc.locality, b.category, description, b.language, m ?? null],
     );
     const r = rows[0];
     return { id: appId(r.id), received_at: minute(r.created_at), status: r.status, locality: loc.locality, ward_code: loc.ward_code, category: b.category, matched_complaint_id: m ?? null };

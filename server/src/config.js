@@ -20,7 +20,12 @@ export const config = {
   claudeModel: process.env.CLAUDE_MODEL ?? 'claude-sonnet-5-5',
   claudeTimeoutMs: Number(process.env.CLAUDE_TIMEOUT_MS ?? 20000),
   fallbacksDir: path.join(serverRoot, 'fallbacks'),
+  demoLoginCode: process.env.DEMO_LOGIN_CODE || '246810',
+  // On for the stage demo: the app's "Demo:" shortcuts read the code from GET /api/auth/demo.
+  demoShortcuts: (process.env.DEMO_SHORTCUTS ?? 'on') !== 'off',
 };
 
 // Read lazily so the key never sits in the exported config object.
 export const anthropicKey = () => process.env.ANTHROPIC_API_KEY || null;
+// shortcut: dev default secret, set AUTH_SECRET anywhere beyond a laptop demo.
+export const authSecret = () => process.env.AUTH_SECRET || 'nagar-sarthi-dev-only-secret';

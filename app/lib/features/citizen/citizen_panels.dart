@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/api/api_client.dart';
+import '../../core/auth/session.dart';
 import '../../core/flag_strings.dart';
 import '../../core/format.dart';
 import '../../core/theme/tokens.dart';
@@ -123,6 +124,8 @@ class _IntakePageState extends ConsumerState<IntakePage> {
   }
 
   Future<void> _file({String? matchedId}) async {
+    if (!await ensureRole(context, why: 'Sign in with your mobile number to file a complaint, so you can track it later.')) return;
+    if (!mounted) return;
     setState(() {
       _busy = true;
       _error = null;
