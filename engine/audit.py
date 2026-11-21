@@ -155,7 +155,8 @@ def build():
         m["z"] = z[cid]
         best, worst = max(z[cid], key=z[cid].get), min(z[cid], key=z[cid].get)
         strength = (f"{NAMES[best]}: better than most contractors on the same kind of work." if z[cid][best] > 0
-                    else f"Closest to typical on {NAMES[best].lower()}.")
+                    else f"Closest to typical on {NAMES[best].lower()}." if z[cid][best] >= -0.5
+                    else "No area is above typical yet.")
         improve = (f"{NAMES[worst]}: below most contractors on the same kind of work. Needs review." if z[cid][worst] < 0
                    else "No area is below typical.")
         by_ward = {}
