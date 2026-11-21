@@ -152,8 +152,9 @@ def build():
             by_ward[code] = {"jobs": len(wj), "rated": ok, "metrics": metrics(wj) if ok else None,
                              "reason_if_not_rated": None if ok else f"Only {len(wj)} jobs in this ward; minimum is {MIN_JOBS_PER_WARD}."}
         contractors[cid] = {"name": js[0]["contractor_name"], "jobs": len(js), "spend": r2(sum(j["cost"] for j in js)),
-            "metrics": m, "strength": f"{best} compares best with the same-method average (adjusted score {cand[best]:+.2f}).",
-            "improve": f"{worst} compares weakest with the same-method average (adjusted score {cand[worst]:+.2f}).",
+            "metrics": m, "strength": (f"{best}: better than the average for the same repair methods." if cand[best] > 0
+                         else f"Closest to the same-method average on {best.lower()}."),
+            "improve": f"{worst}: furthest from the average for the same repair methods.",
             "by_ward": by_ward,
             "work_order_ids": {"all": [j["work_order_id"] for j in js], "sla_missed": [j["work_order_id"] for j in js if j["missed"]],
                                "reopened": [j["work_order_id"] for j in js if j["reopened"]],
@@ -232,10 +233,10 @@ def build():
     # Categories with no work orders ("Road related", "Other") fall back to the best method across all jobs.
     def best_method(js):
         cs = [(mean([j["reopened"] for j in v]), m, v) for m, v in ((m, [j for j in js if j["repair_method"] == m]) for m in {j["repair_method"] for j in js}) if len(v) >= MIN_METHOD_JOBS]
-        rr, m, v = min(cs, key=lambda x: x[0])
+        rr, m, v = min(cs, key=lambda x: (x[0], x[1]))  # ties: method name, so output is stable
         return m, rr, med([j["cost"] for j in v])
     typ_rec = {t: best_method([j for j in wo if j["work_type"] == t]) for t in typ_sev}
-    fallback_rec = best_method(wo)
+    fallback_rec = typ_rec["Pothole"]  # no work orders exist for 'Road related'/'Other'; treat as a pothole
     acc_by_road = defaultdict(list)
     for a in acc: acc_by_road[a["road_id"]].append(a)
     ward_roads = defaultdict(list)
@@ -276,18 +277,21 @@ def build():
         parts = {"severity": r2(W_SEVERITY * sev / 5), "access": r2(access), "accidents": r2(W_ACCIDENTS * min(1, na / ACCIDENT_CAP)),
                  "flood": r2(W_FLOOD * hb[0]), "traffic": r2(W_TRAFFIC * ci / 10)}
         m, rr, cost = typ_rec.get(cat, fallback_rec)
+        dlp = road["under_dlp"] == "Y"  # warranty repair costs BMC nothing
+        if dlp: reasons.append("Road under warranty: to be claimed from the original contractor")
         return {"issue": {"category": cat, "locality": locality, "complaint_ids": [c["complaint_id"] for c in cs],
                           "upvotes": sum(int(c["upvotes"] or 0) for c in cs)},
                 "road_id": road["road_id"], "lat": r6(p[0]), "lon": r6(p[1]), "score": r2(sum(parts.values())), "parts": parts,
-                "reasons": reasons, "recommended_method": m, "method_reopen_rate": r2(rr), "est_cost_inr": r2(cost)}
+                "reasons": reasons, "recommended_method": m, "method_reopen_rate": r2(rr), "est_cost_inr": r2(cost),
+                "claim_under_dlp": dlp, "cost_to_ward_inr": 0 if dlp else r2(cost)}
     next_rupee = {}
     for code in ward_by:
         items = [x for x in (score_issue(k, cs) for k, cs in issues.items() if k[0] == code) if x]
         items.sort(key=lambda x: (-x["score"], -x["issue"]["upvotes"]))
         remaining, cum, over = max(0.0, wards[code]["remaining"]), 0.0, False
         for i, x in enumerate(items, 1):
-            cum += x["est_cost_inr"]; over = over or cum > remaining  # list stops at the first item that busts the budget
-            x["rank"], x["funded"] = i, not over
+            cum += x["cost_to_ward_inr"]; over = over or cum > remaining  # list stops at the first item that busts the budget
+            x["rank"], x["funded"] = i, x["claim_under_dlp"] or not over  # warranty items are always funded
         next_rupee[code] = {"remaining_budget": r2(remaining), "items": items}
 
     # ---- timeline (rain file covers Jun-Sep only; Oct rain is null) ----
