@@ -7,6 +7,7 @@ import 'core/flag_strings.dart';
 import 'features/about/about_screen.dart';
 import 'features/audit/audit_screen.dart';
 import 'features/auth/sign_in_screen.dart';
+import 'features/citizen/ask_bot.dart';
 import 'features/citizen/citizen_panels.dart';
 import 'features/corporator/corporator_panels.dart';
 import 'features/home/home_screen.dart';
@@ -27,7 +28,7 @@ String? _q(GoRouterState s, String key) => s.uri.queryParameters[key];
 /// sit above the tabs on the root navigator, so back returns to the tab.
 ///   /  /map  /act (Report or Audit by role)  /contractors  /my-ward
 ///   /ward?code=  /road?id=&wo=  /contractor?id=&ward=  /complaint?id=  /track
-///   /next-rupee?ward=  /trail?ward=  /issue?id=  /about  /sign-in  /page (any other detail page, passed as extra)
+///   /ask  /next-rupee?ward=  /trail?ward=  /issue?id=  /about  /sign-in  /page (any other detail page, passed as extra)
 final appRouter = GoRouter(
   navigatorKey: rootNavigatorKey,
   routes: [
@@ -63,6 +64,7 @@ final appRouter = GoRouter(
       redirect: (_, s) => _q(s, 'id') == null ? '/' : null,
       builder: (_, s) => DetailPage(title: 'Complaint ${_q(s, 'id')}', body: ComplaintDetail(_q(s, 'id')!)),
     ),
+    GoRoute(path: '/ask', builder: (_, _) => const DetailPage(title: kAskBot, body: AskBotPage())),
     GoRoute(path: '/track', builder: (_, _) => const DetailPage(title: kTrackComplaint, body: TrackPage())),
     GoRoute(
       path: '/next-rupee',

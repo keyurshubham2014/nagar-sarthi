@@ -15,6 +15,7 @@ import '../officer/officer_data.dart';
 import '../officer/officer_panels.dart';
 import '../officer/panel.dart';
 import '../trail/trail_screen.dart';
+import 'ask_bot.dart';
 
 // Citizen flow (TASK-06): raise, track, share, ask. Pages live in the shared panel host.
 
@@ -46,6 +47,11 @@ class ReportScreen extends StatelessWidget {
       title: context.tr(kReportProblem),
       showBack: false,
       actions: [
+        IconButton(
+          tooltip: context.tr(kAskBot),
+          onPressed: openAskBot,
+          icon: const Icon(Icons.chat_bubble_outline),
+        ),
         TextButton.icon(
           onPressed: () => appRouter.push('/track'),
           icon: const Icon(Icons.timeline),

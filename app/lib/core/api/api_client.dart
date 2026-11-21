@@ -177,6 +177,11 @@ class ApiClient {
   Future<Map<String, dynamic>> linker({String? ward}) =>
       _call(() => _dio.get('/api/linker', queryParameters: {'ward': ?ward}));
 
+  /// "What happened to my complaint?": {text, source, kind, lang, complaint_id, issue_id, work_order_id, road_id...}.
+  /// The server finds the id in [text]; [ward] answers ward-level questions when there is no id.
+  Future<Map<String, dynamic>> answer(String text, {required String language, String? ward}) =>
+      _call(() => _dio.post('/api/claude/answer', data: {'text': text, 'language': language, 'ward_code': ?ward}));
+
   /// Citizen intake: {source, category, language, locality, ward_code, ward_name, match_count, matches[]}.
   Future<Map<String, dynamic>> intake(String text) =>
       _call(() => _dio.post('/api/claude/intake', data: {'text': text}));

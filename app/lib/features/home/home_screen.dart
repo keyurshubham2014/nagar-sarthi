@@ -13,6 +13,7 @@ import '../../core/theme/tokens.dart';
 import '../../core/widgets/saarthee.dart';
 import '../audit/audit_screen.dart';
 import '../auth/account_sheet.dart';
+import '../citizen/ask_bot.dart';
 import '../citizen/citizen_panels.dart';
 import '../citizen/report_card.dart';
 import '../corporator/corporator_panels.dart';
@@ -239,6 +240,12 @@ class _CitizenHome extends ConsumerWidget {
         title: context.tr(kTrackComplaint),
         subtitle: context.tr('By complaint id or by locality.'),
         onTap: () => appRouter.push('/track'),
+      ),
+      NavCard(
+        icon: Icons.chat_bubble_outline,
+        title: context.tr(kAskBot),
+        subtitle: context.tr('What happened to my complaint? Type its id or a question.'),
+        onTap: openAskBot,
       ),
       NavCard(
         icon: Icons.ios_share,

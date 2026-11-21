@@ -7,11 +7,13 @@ import { notice } from './notice.js';
 import { brief } from './brief.js';
 import { intake } from './citizen.js';
 import { question } from './question.js';
+import { answer } from './answer.js';
 
 /**
  * Claude feature registry. Later tasks add entries (notice, brief, intake, question):
  *   features.notice = {
- *     prepare?(body, audit) -> ctx  // optional: validate (throw ApiError for 4xx), select rows
+ *     prepare?(body, audit) -> ctx  // optional, may be async: validate (throw ApiError for 4xx), select rows.
+ *                                   // ctx.noLive skips Claude (answer is the fallback); ctx.reply is merged into the response.
  *     buildPrompt(body, audit, ctx) -> { system?, prompt, maxTokens? },
  *     fallbackKey(body) -> string   // key into server/fallbacks/notice.json
  *     validate?(text, ctx) -> bool  // optional: false sends the saved fallback instead of the live text
@@ -35,6 +37,7 @@ export const features = {
   brief,
   intake,
   question,
+  answer,
 };
 
 // Fallback text may hold {{name}} tokens, filled from prepare()'s `vars`.
@@ -68,9 +71,10 @@ export async function relay(name, body, audit) {
     throw badRequest('Body must be a JSON object');
   }
   // Optional prepare(body, audit): validates input (throws 4xx) and selects data for prompt and fallback.
-  const ctx = feature.prepare ? feature.prepare(body, audit) : {};
+  const ctx = feature.prepare ? await feature.prepare(body, audit) : {};
+  const extra = ctx.reply ?? {};
 
-  const c = getClient();
+  const c = ctx.noLive ? null : getClient();
   if (c) {
     const started = Date.now();
     try {
@@ -95,7 +99,7 @@ export async function relay(name, body, audit) {
         console.warn(`[claude] ${name} draft failed validation, using fallback`);
       } else if (text) {
         console.log(`[claude] ${name} live in ${Date.now() - started} ms`);
-        return { text, source: 'live' };
+        return { text, source: 'live', ...extra };
       } else {
         console.warn(`[claude] ${name} returned no text, using fallback`);
       }
@@ -103,7 +107,7 @@ export async function relay(name, body, audit) {
       // Log status/name only: SDK error messages can echo request details.
       console.warn(`[claude] ${name} failed after ${Date.now() - started} ms (${e.status ?? e.name}), using fallback`);
     }
-  } else {
+  } else if (!ctx.noLive) {
     console.warn(`[claude] ${name}: ANTHROPIC_API_KEY not set, using fallback`);
   }
 
@@ -113,5 +117,5 @@ export async function relay(name, body, audit) {
   } catch {
     /* bad body shape: default entry */
   }
-  return { text: fill(await fallbackText(name, key), ctx.vars), source: 'fallback' };
+  return { text: fill(await fallbackText(name, key), ctx.vars), source: 'fallback', ...extra };
 }
