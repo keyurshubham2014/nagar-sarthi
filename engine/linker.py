@@ -168,6 +168,8 @@ def complaint_scope(c):
 
 def group(items):
     """items: in-scope complaint dicts sorted by (time, id). Returns list of member lists (deterministic).
+    Uses the dataset's ORIGINAL coordinates on purpose: snapping into real ward polygons (snap.py) is display only
+    and runs afterwards in audit.py, so the 80 m rule measures the distances it was tuned on.
     Joins an open issue with the same clean category and ward, seen within WINDOW_DAYS (rolling, from its latest
     complaint), at the same place: <= SAME_PLACE_M from the issue's GPS centre when both have GPS, else the same
     resolved locality and (when both name one) the same road. Ties go to the most recently active issue."""

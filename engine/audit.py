@@ -6,9 +6,15 @@ from collections import defaultdict, Counter
 from datetime import datetime, date, timedelta
 from pathlib import Path
 from linker import run as link
+from snap import Wards, in_bbox
 
 ROOT = Path(__file__).resolve().parent.parent
 DATA, OUT = ROOT / "data", ROOT / "engine" / "out" / "audit.json"
+ROADS_OUT = ROOT / "engine" / "out" / "roads_display.geojson"
+WARDS = Wards(ROOT / "engine" / "geo" / "wards_real.geojson")  # real BMC wards (OpenCity / Oorvani via bharatlas, CC0-1.0)
+WARD_SOURCE = {"source": "OpenCity / Oorvani Foundation via bharatlas", "licence": "CC0-1.0",
+               "note": "Ward boundaries are real. Road and complaint positions come from a synthetic dataset; "
+                       "about 1 in 10 were moved to sit inside their own ward for display."}
 
 # ---- thresholds and weights (change here) ----
 OVER_RATE_RATIO = 1.5            # cost / expected above this is flagged
@@ -188,6 +194,12 @@ def build():
             if t in w["flags"]:
                 if rd["status"] == "clean" or SERIOUS.index(t) < SERIOUS.index(rd["status"]): rd["status"] = t
 
+    # ---- linker: complaints -> issues -> work orders (engine/linker.py); adds keys, renames none ----
+    issue_list, linker, per, ward_issues = link(comps, wo, locs, roads_t, wards_t, rows("social_posts"))
+    issue_link = {i["id"]: i["link"] for i in issue_list}
+    for e in per.values():
+        if e["issue_id"]: e["link"] = issue_link[e["issue_id"]]  # 'inferred' lets the app label the outcome as our match
+
     # ---- complaints: resolve ward, link ----
     loc_idx = defaultdict(list)  # lower name/alias -> [(ward, lat, lon)]
     for l in locs:
@@ -212,9 +224,11 @@ def build():
              "work_order_id": w["work_order_id"] if w else None}
         if w: e.update(contractor_name=w["contractor_name"], cost_inr=r2(w["cost"]), sla_met=not w["missed"], reopened=w["reopened"])
         complaints[c["complaint_id"]] = e
+    for cid, e in per.items(): complaints[cid].update(e)
 
     # ---- wards ----
-    open_c = [c for c in comps if c["status"] in ("Open", "In Progress")]
+    # open = Open / In Progress and a road problem BMC owns (linker scope); noise like 'Test' or 'garbage' is left out
+    open_c = [c for c in comps if c["status"] in ("Open", "In Progress") and per[c["complaint_id"]]["scope"] == "in_scope"]
     wards = {}
     for code, w in ward_by.items():
         js = [j for j in wo if j["ward_code"] == code]
@@ -332,10 +346,46 @@ def build():
             d = (w["c"].date() + timedelta(days=30)).isoformat()
             if d in tl: tl[d]["reopens"].append({"work_order_id": w["work_order_id"], "road_id": w["road_id"]})
 
-    # ---- linker: complaints -> issues -> work orders (engine/linker.py); adds keys, renames none ----
-    issue_list, linker, per, ward_issues = link(comps, wo, locs, roads_t, wards_t, rows("social_posts"))
-    for cid, e in per.items(): complaints[cid].update(e)
     for code, v in ward_issues.items(): wards[code]["issues"] = v
+    for n in next_rupee.values():
+        for x in n["items"]:  # the linker issue holding most of the item's complaints (ties: lowest id)
+            ids = Counter(per[c]["issue_id"] for c in x["issue"]["complaint_ids"] if per[c]["issue_id"])
+            x["issue_id"] = min(ids, key=lambda k: (-ids[k], k)) if ids else None
+
+    # ---- display only: move positions that fall outside their own real ward into it (engine/snap.py) ----
+    moves = defaultdict(list)
+    def put(e, code, kind, la="lat", lo="lon"):
+        if e.get(la) is None: return
+        y, x, d = WARDS.snap(code, e[la], e[lo])
+        moves[kind].append(d)
+        if d: e[la], e[lo], e["snapped"] = y, x, True
+    shift = {}
+    for rid, rd in roads.items():  # a segment moves as a unit: both ends by the vector that puts its midpoint inside
+        mla, mlo = (rd["start_lat"] + rd["end_lat"]) / 2, (rd["start_lon"] + rd["end_lon"]) / 2
+        y, x, d = WARDS.snap(rd["ward_code"], mla, mlo)
+        moves["roads"].append(d)
+        if d:
+            shift[rid] = (y - mla, x - mlo)
+            for k in ("start", "end"): rd[k + "_lat"], rd[k + "_lon"] = r6(rd[k + "_lat"] + y - mla), r6(rd[k + "_lon"] + x - mlo)
+            rd["snapped"] = True
+    for d in tl.values():
+        for e in d["complaints"]: put(e, e["ward_code"], "complaints")
+    for code, w in wards.items():
+        for e in w["never_fixed"]: put(e, code, "complaints")
+        put(w, code, "ward_centroids", "centroid_lat", "centroid_lon")
+    for e in issue_list: put(e, e["ward_code"], "issues")
+    for code, n in next_rupee.items():
+        for e in n["items"]: put(e, code, "next_rupee")
+    def pt(rs): return [{**r, **{k: r6(float(r[k])) for k in ("lat", "lon")}} for r in rs]
+    hot_out, fac_out = pt(hot), pt(fac)
+    for e in hot_out: put(e, e["ward_code"], "hotspots")
+    for e in fac_out: put(e, e["ward_code"], "facilities")
+    snap_meta = {k: {"points": len(v), "moved": sum(1 for d in v if d), "median_move_m": round(med([d for d in v if d]) or 0),
+                     "max_move_m": round(max(v, default=0))} for k, v in moves.items()}
+    roads_fc = json.loads((DATA / "roads.geojson").read_text(encoding="utf-8"))
+    for f in roads_fc["features"]:  # same properties as data/roads.geojson so the app can swap the asset
+        dy, dx = shift.get(f["properties"]["road_id"], (0, 0))
+        f["geometry"]["coordinates"] = [[r6(p[0] + dx), r6(p[1] + dy)] for p in f["geometry"]["coordinates"]]
 
     cnt = Counter(f["type"] for f in flags)
     inr = defaultdict(float)
@@ -343,17 +393,18 @@ def build():
     meta = {"generated_at": datetime.now().isoformat(timespec="seconds"), "disclaimer": DISCLAIMER, "thresholds": THRESHOLDS, "weights": WEIGHTS,
             "totals": {"spend": r2(sum(w["cost"] for w in wo)), "budget": r2(sum(float(w["monsoon_repair_budget_inr_2025"]) for w in wards_t)),
                        "work_orders": len(wo), "flags": {t: {"count": cnt[t], "inr": r2(inr[t])} for t in FLAG_TYPES},
-                       "open_complaints_skipped_no_ward": skipped}}
-    def pt(rs): return [{**r, **{k: r6(float(r[k])) for k in ("lat", "lon")}} for r in rs]
+                       "open_complaints_skipped_no_ward": skipped},
+            "ward_boundaries": WARD_SOURCE, "snap": snap_meta}
     return {"meta": meta, "flags": flags, "wards": wards, "roads": roads, "contractors": contractors, "next_rupee": next_rupee,
-            "timeline": list(tl.values()), "complaints": complaints, "facilities": pt(fac), "hotspots": pt(hot),
-            "issues": issue_list, "linker": linker}
+            "timeline": list(tl.values()), "complaints": complaints, "facilities": fac_out, "hotspots": hot_out,
+            "issues": issue_list, "linker": linker}, roads_fc
 
 
 def main():
-    out = build()
+    out, roads_fc = build()
     OUT.parent.mkdir(parents=True, exist_ok=True)
     OUT.write_text(json.dumps(out, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
+    ROADS_OUT.write_text(json.dumps(roads_fc, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
     t = out["meta"]["totals"]
     print(f"wrote {OUT} ({OUT.stat().st_size // 1024} KB); spend {t['spend'] / 1e5:.1f} lakh, budget {t['budget'] / 1e5:.1f} lakh")
     if "--check" in sys.argv:
@@ -373,7 +424,21 @@ def main():
         assert lk["raw_complaints"] == len(cm) == lk["in_issues"] + lk["noise"] + lk["out_of_scope"], "linker totals"
         assert lk["in_issues"] == sum(member.values()) and lk["issues"] == len(iss), "linker issue totals"
         assert sum(v["count"] for v in lk["issues_by_outcome"].values()) == len(iss), "outcome totals"
-        print("check OK:", {**got}, f"| {lk['raw_complaints']} complaints -> {lk['issues']} issues")
+        # display snapping: road midpoints, issue and complaint points sit inside their own real ward; all in Mumbai
+        rd = out["roads"].values()
+        assert all(WARDS.inside(r["ward_code"], (r["start_lat"] + r["end_lat"]) / 2, (r["start_lon"] + r["end_lon"]) / 2) for r in rd), "road midpoint outside ward"
+        cpts = [e for d in out["timeline"] for e in d["complaints"] if e["ward_code"]]
+        cpts += [{**e, "ward_code": k} for k, w in out["wards"].items() for e in w["never_fixed"] if e["lat"] is not None]
+        ipts = [i for i in iss if i["ward_code"] and i["lat"] is not None]
+        assert all(WARDS.inside(e["ward_code"], e["lat"], e["lon"]) for e in cpts + ipts), "complaint or issue point outside ward"
+        pts = [(r[k + "_lat"], r[k + "_lon"]) for r in rd for k in ("start", "end")] + [(e["lat"], e["lon"]) for e in cpts + ipts]
+        pts += [(e["lat"], e["lon"]) for k in ("hotspots", "facilities") for e in out[k]]
+        pts += [(e["lat"], e["lon"]) for n in out["next_rupee"].values() for e in n["items"]]
+        pts += [(p[1], p[0]) for f in roads_fc["features"] for p in f["geometry"]["coordinates"]]
+        assert all(in_bbox(*p) for p in pts), "coordinate outside Mumbai"
+        assert not any(cm[c]["scope"] != "in_scope" for n in out["next_rupee"].values() for i in n["items"] for c in i["issue"]["complaint_ids"]), "noise in next rupee"
+        assert not any(cm[e["complaint_id"]]["scope"] != "in_scope" for w in out["wards"].values() for e in w["never_fixed"]), "noise in never_fixed"
+        print("check OK:", {**got}, f"| {lk['raw_complaints']} complaints -> {lk['issues']} issues | snapped", {k: v["moved"] for k, v in out["meta"]["snap"].items()})
 
 
 if __name__ == "__main__":
