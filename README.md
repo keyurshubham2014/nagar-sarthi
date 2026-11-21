@@ -21,7 +21,8 @@ Each of these is "needs review" or "to be claimed and verified", not a finding o
 **Ward officer**
 - A money map: tap a ward for its spend, budget and flags, tap a road for every job and the evidence behind each flag.
 - Drafts a recovery notice for a job billed under warranty or above the rate card.
-- A "next rupee" list: where the ward should spend next, with the score parts shown.
+- A "next rupee" list: where the ward should spend next, with the score parts shown, and a budget what-if (slider, quick chips or a typed amount) that moves the funding line live.
+- A complaint trail: 6,501 raw complaints cleaned (noise and other agencies' roads set aside, 15% of categories corrected) into issues, each followed to its work order and outcome (fixed and held, fixed then failed, in progress, never fixed), with inferred links marked and the method's measured accuracy shown.
 
 **Corporator**
 - Fair contractor scorecards (speed, how long repairs held, pricing), adjusted for repair method, with the work orders behind every number.
@@ -30,6 +31,7 @@ Each of these is "needs review" or "to be claimed and verified", not a finding o
 **Citizen**
 - Report a problem in your own words (English, Hindi, Marathi or Hinglish); it finds neighbours who already reported it and the work order that followed.
 - Track a complaint from report to repair, and whether the fix held.
+- Ask "what happened to my complaint?" in English, Hindi or Marathi: give the id, get a plain answer built only from the complaint's own facts (work order, cost, contractor, outcome, warranty), with links to the road and the trail.
 - Share a ward report card, and ask questions about your ward.
 
 Also: "play the monsoon", a time slider over the season with complaints and failed repairs on the map.
@@ -37,7 +39,7 @@ Also: "play the monsoon", a time slider over the season with complaints and fail
 ## How it works
 
 - **Rules in code for every flag.** A Python script (`engine/audit.py`, standard library only) reads `data/` and writes `engine/out/audit.json`. The same data always gives the same flags, scores and totals.
-- **Claude for language only:** recovery notices, ward briefs, understanding a citizen's complaint, and answering questions. Claude never decides a flag or a number.
+- **Claude for language only:** recovery notices, ward briefs, understanding a citizen's complaint, and answering questions (including "what happened to my complaint?", where the server picks the facts and rejects any rupee figure Claude adds). Claude never decides a flag or a number.
 - **Every Claude feature has a saved fallback.** If there is no API key or no network, the server answers from `server/fallbacks/` and the app marks it as a saved draft.
 
 **Built with:** Flutter (Android and web), Node.js (Express), Postgres, Python standard library, Claude.

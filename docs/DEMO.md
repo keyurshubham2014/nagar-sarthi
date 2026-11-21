@@ -70,8 +70,17 @@ The search box takes a work order id or a road name; the contractor menu filters
 
 ### 3. Officer: next rupee (about 1 minute)
 
-1. Home, **Where should the next rupee go?** The ranked list opens: items under warranty (₹0 to the ward), then "Budget ends here".
-2. Tap **Show the pins on the map**: the Map tab opens on Ward E with the numbered pins. Tap a pin for its score breakdown, or tap a row in the list instead.
+1. Home, **Where should the next rupee go?** The page opens on **What if the budget changes?** Ward E has ₹0 left: 3 of 13 items funded (the warranty items, ₹0 to the ward), then "Funding stops here".
+2. Tap **+₹5 L**: the line drops below item 11, "11 of 13 items funded", and "+₹5.0 L funds 8 more items, including 4 near a hospital and 3 near a school". Drag the slider or type an amount in lakh (e.g. `2.2`); **Reset** goes back. Ranks never change; tap a row for its five score parts.
+3. Tap **Show the pins on the map**: the Map tab opens on Ward E with the numbered pins. Tap a pin for its score breakdown, or tap a row in the list instead.
+
+### 3b. The complaint trail (about 1 minute)
+
+1. Home (officer or corporator), **Complaint trail**, or **My Ward**, **Complaint trail**. Ward E's funnel: **277 complaints became 152 issues**: 2 not about roads, 22 not BMC's road, 253 grouped; 124 reached a work order (8 inferred); 86 fixed and held (₹42.4 L), 38 fixed then failed (₹20.1 L), 5 in progress, 23 never fixed; 17% of categories corrected. **All Mumbai**: 6,501 → 3,396 issues.
+2. **How we link, and how often it is right**: the six method lines and the measured accuracy (category 83% → 98%, grouping 68% precision, inferred links 80% right).
+3. In All Mumbai, search `ISS-00069`: one complaint filed as Broken paver blocks, **corrected to Pothole**, and work order WO25-00027 with the **Inferred link** chip and its evidence.
+4. Chip **Social posts only** (scroll the chips): issues with no matching complaint, e.g. ISS-01134 Waterlogging · Mankhurd, three posts, no work order.
+5. From a road page, each work order has **Complaint trail: ISS-…**; a tracked complaint shows **Part of issue … · See the full trail**.
 
 ### 4. Corporator: brief and scorecard (about 2 minutes)
 
@@ -91,7 +100,8 @@ The search box takes a work order id or a road name; the contractor menu filters
 5. Point at **BMC25-006359**: Resolved, WO25-02448, late, repair failed within 30 days. And **BMC25-006228**: held.
 6. Tap **Add my voice**. It shows "Filed as NS-000001 · Your voice is added to BMC25-006359". Tap **Track** to see the timeline. Tap **Track it** to see the repair trail of BMC25-006359.
 7. **Track** (top right of the Report tab, or **Track a complaint** on Home) also finds a complaint by id or by locality.
-8. Home, **My ward's report card**. Tap **Share image** (Android share sheet) or **Download image** (web).
+8. Home, **Ask about a complaint** (or the chat icon on the Report tab). Tap the chip **BMC25-006359**: a plain answer (work order WO25-02448, ₹13,566, failed within 30 days, needs review), the "Answered live by Claude" or "Saved answer" label, and cards to the complaint, the road and the issue. Tap **Why is my road still broken?** with no id: it answers from Ward E's figures and asks for the id. Type `BMC25-999999`: "could not find" with where to find the id. In हिंदी or मराठी the chips and answers follow the app language; a question typed in Hindi gets a Hindi answer.
+9. Home, **My ward's report card**. Tap **Share image** (Android share sheet) or **Download image** (web).
 
 ### 6. Close
 
@@ -111,7 +121,7 @@ Three lines: money comes back (officer), repairs that last (corporator), citizen
 | Server down | "Could not reach the Nagar Sarthi server" with Retry | `cd server && npm start`, then tap Retry. On Android check the app uses `10.0.2.2:8787`. |
 | Postgres down | Map, panels and drafts still work. Filing shows "database is down" with Retry. Sign-in still works for the three demo numbers. | `docker compose -f infra/docker-compose.yml up -d --wait`, then Retry. |
 | No map tiles (no internet) | Banner "Map tiles could not load". Ward and road shapes still show. | Carry on; the shapes are enough. |
-| Claude unavailable or no key | Notice, brief, question and intake answer at once from saved drafts, with a "Saved draft" / "Understood on device rules" badge. | Nothing to do. Say "this is the saved draft". |
+| Claude unavailable or no key | Notice, brief, question, intake and the complaint bot answer at once from saved drafts or templates, with a "Saved draft" / "Understood on device rules" badge. | Nothing to do. Say "this is the saved draft". |
 | Sign-in fails | "Could not sign in" | Check the server is up. If `DEMO_SHORTCUTS=off` is set, type the phone and the code from `DEMO_LOGIN_CODE`. |
 | "Your session has ended" | Snackbar with Sign in | The server restarted with a new `AUTH_SECRET`. Sign in again (account button on Home). |
 | Parel shows 6 or more matches | Earlier rehearsal complaints | Run the TRUNCATE command above. |
