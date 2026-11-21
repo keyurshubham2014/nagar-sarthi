@@ -102,8 +102,8 @@ class SectionTitle extends StatelessWidget {
   final String text;
   @override
   Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.only(top: AppSpacing.s20, bottom: AppSpacing.s8),
-    child: Text(text, style: Theme.of(context).textTheme.titleSmall),
+    padding: const EdgeInsets.only(top: AppSpacing.sectionTitleTop, bottom: AppSpacing.s8),
+    child: Semantics(header: true, child: Text(text, style: Theme.of(context).textTheme.titleLarge)),
   );
 }
 
@@ -146,7 +146,8 @@ class LabelledBar extends StatelessWidget {
         children: [
           Row(
             children: [
-              Expanded(child: Text(label, style: t.bodyMedium, overflow: TextOverflow.ellipsis)),
+              Expanded(child: Text(label, style: t.bodyMedium)),
+              const SizedBox(width: AppSpacing.s8),
               Text(trailing, style: t.labelLarge),
             ],
           ),

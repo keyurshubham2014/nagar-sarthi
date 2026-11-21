@@ -45,7 +45,7 @@ class _AccountSheet extends ConsumerWidget {
                       Text(s == null ? context.tr('Not signed in') : context.tr(roleLabels[s.role] ?? s.role), style: t.titleLarge),
                       Text(
                         s == null
-                            ? context.tr('The map and audit are open to everyone. Sign in to file a complaint or draft a notice.')
+                            ? context.tr('The map and ward figures are open to everyone. Sign in to file a complaint or draft a notice.')
                             : '${s.phone}${s.ward == null ? '' : ' · ${context.tr('Ward {w}', {'w': s.ward})}'}',
                         style: t.bodySmall,
                       ),

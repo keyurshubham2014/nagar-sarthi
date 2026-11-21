@@ -107,8 +107,8 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
             onWardTap: (w) => ref.read(mapFocusProvider.notifier).focusWard(w.code),
             onRoadTap: (r) => ref.read(mapFocusProvider.notifier).selectRoad(r.id),
           );
-    // Ward labels go right above the last of wards/roads, so roads never cover them.
-    final labelsAfter = active.lastIndexWhere((l) => l.id == 'wards' || l.id == 'roads');
+    // Shapes first, then monsoon roads, then ward labels (so no line covers them), then pins and clusters.
+    bool shape(MapLayerDef l) => l.id == 'wards' || l.id == 'roads';
 
     return Scaffold(
       appBar: SaartheeAppBar(
@@ -138,12 +138,12 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
                 _later(() => _fitWard(ref.read(mapFocusProvider).ward));
               },
               layers: [
-                if (layerCtx != null)
-                  for (final (i, l) in active.indexed) ...[
-                    l.build(layerCtx),
-                    if (i == labelsAfter && visible.contains('wards')) WardLabelLayer(layerCtx),
-                  ],
+                if (layerCtx != null) ...[for (final l in active.where(shape)) l.build(layerCtx)],
                 if (monsoonOn) ...const [MonsoonRainWash(), MonsoonRoadLayer(), MonsoonDotLayer()],
+                if (layerCtx != null) ...[
+                  if (visible.contains('wards')) WardLabelLayer(layerCtx),
+                  for (final l in active.where((l) => !shape(l))) l.build(layerCtx),
+                ],
               ],
             ),
           ),

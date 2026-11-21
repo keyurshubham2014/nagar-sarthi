@@ -184,7 +184,10 @@ class LanguageButton extends ConsumerWidget {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text(sheet.tr('Language'), style: Theme.of(sheet).textTheme.titleLarge),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.gutter),
+                child: Align(alignment: Alignment.centerLeft, child: Text(sheet.tr('Language'), style: Theme.of(sheet).textTheme.titleLarge)),
+              ),
               const SizedBox(height: AppSpacing.s8),
               for (final e in appLanguages.entries)
                 ListTile(
@@ -220,8 +223,12 @@ class SaartheeAppBar extends StatelessWidget implements PreferredSizeWidget {
   final bool showBack;
   final PreferredSizeWidget? bottom;
 
+  /// Long titles use the smaller title size and may wrap to two lines.
+  bool get _long => title.length > 22;
+  double get _toolbar => subtitle == null ? (_long ? 72 : 64) : (_long ? 92 : 72);
+
   @override
-  Size get preferredSize => Size.fromHeight((subtitle == null ? 64 : 72) + (bottom?.preferredSize.height ?? 0));
+  Size get preferredSize => Size.fromHeight(_toolbar + (bottom?.preferredSize.height ?? 0));
 
   @override
   Widget build(BuildContext context) {
@@ -230,7 +237,7 @@ class SaartheeAppBar extends StatelessWidget implements PreferredSizeWidget {
     final canPop = showBack && Navigator.of(context).canPop();
     return AppBar(
       automaticallyImplyLeading: false,
-      toolbarHeight: subtitle == null ? 64 : 72,
+      toolbarHeight: _toolbar,
       leading: canPop
           ? IconButton(tooltip: 'Back', icon: const Icon(Icons.arrow_back), onPressed: () => Navigator.of(context).maybePop())
           : null,
@@ -243,9 +250,8 @@ class SaartheeAppBar extends StatelessWidget implements PreferredSizeWidget {
             header: true,
             child: Text(
               title,
-              // Long titles drop to the smaller title size and wrap to a second line.
-              style: title.length > 22 ? t.titleLarge : t.headlineSmall,
-              maxLines: subtitle == null ? 2 : 1,
+              style: _long ? t.titleLarge : t.headlineSmall,
+              maxLines: 2,
               overflow: TextOverflow.ellipsis,
             ),
           ),

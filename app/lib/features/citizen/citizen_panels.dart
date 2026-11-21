@@ -43,7 +43,6 @@ class ReportScreen extends StatelessWidget {
   Widget build(BuildContext context) => Scaffold(
     appBar: SaartheeAppBar(
       title: context.tr(kReportProblem),
-      subtitle: context.tr('In your own words. See if neighbours already raised it.'),
       showBack: false,
       actions: [
         TextButton.icon(
@@ -159,6 +158,9 @@ class _IntakePageState extends ConsumerState<IntakePage> {
     final r = _result;
     return PanelList(
       children: [
+        Text(context.tr('What is the problem?'), style: t.titleLarge),
+        Text(context.tr('In your own words. See if neighbours already raised it.'), style: t.bodyMedium),
+        const SizedBox(height: AppSpacing.s16),
         TextField(
           controller: _text,
           minLines: 4,

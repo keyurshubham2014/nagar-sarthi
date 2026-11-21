@@ -243,9 +243,10 @@ class RoadPanel extends ConsumerWidget {
         const SizedBox(height: AppSpacing.s12),
         Text(formatInr(r['spend'] as num? ?? 0), style: t.headlineMedium),
         Text('spent on this segment across ${wos.length} work orders', style: t.bodyMedium),
-        for (final type in noticeTypes) ...[
+        // One filled button per screen: the first notice; any second one is outlined.
+        for (final (i, type) in noticeTypes.indexed) ...[
           const SizedBox(height: AppSpacing.s8),
-          FilledButton.icon(
+          (i == 0 ? FilledButton.icon : OutlinedButton.icon)(
             onPressed: () => showNoticeSheet(context, type: type, roadId: id),
             icon: const Icon(Icons.edit_note),
             label: Text('$kDraftNotice · ${flagShortLabels[type]}'),
@@ -346,6 +347,7 @@ class _WorkOrderCard extends StatelessWidget {
             Row(
               children: [
                 Expanded(child: Text('${wo['id']} · ${wo['method']}', style: t.titleSmall)),
+                const SizedBox(width: AppSpacing.s8),
                 Text(formatInr(wo['cost_inr'] as num? ?? 0), style: t.titleSmall),
               ],
             ),
@@ -359,7 +361,8 @@ class _WorkOrderCard extends StatelessWidget {
               children: [
                 Tag(onTime ? 'On time' : 'Slower than typical', bg: onTime ? c.successTint : c.warningTint, fg: onTime ? c.success : c.warning),
                 Tag(reopened ? 'Re-opened' : 'Not re-opened', bg: reopened ? c.errorTint : c.surfaceAlt, fg: reopened ? c.error : c.textSecondary),
-                for (final type in types)
+                // Timing is already shown by the on-time tag.
+                for (final type in types.where((t) => t != 'sla_missed'))
                   Tag(flagShortLabels[type] ?? type, bg: flagColor(type).withValues(alpha: 0.12), fg: flagColor(type)),
               ],
             ),

@@ -192,7 +192,7 @@ class _AuditListState extends ConsumerState<AuditList> {
       Text.rich(
         TextSpan(
           children: [
-            TextSpan(text: '$_total work orders', style: t.titleMedium),
+            TextSpan(text: _total == 1 ? '1 flag' : '$_total flags', style: t.titleMedium),
             if (_type != 'sla_missed')
               TextSpan(text: ' · ${formatInr(_totalInr)} ${_type == 'dlp_paid' ? 'to be claimed and verified' : 'to review'}', style: t.bodyMedium),
           ],

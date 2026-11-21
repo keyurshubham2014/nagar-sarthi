@@ -7,6 +7,7 @@ import 'core/auth/session.dart';
 import 'core/i18n.dart';
 import 'core/prefs.dart';
 import 'core/theme/app_theme.dart';
+import 'core/theme/scroll_behavior.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -22,6 +23,7 @@ class NagarSarthiApp extends StatelessWidget {
   Widget build(BuildContext context) => MaterialApp.router(
     title: 'Nagar Sarthi',
     debugShowCheckedModeBanner: false,
+    scrollBehavior: const AppScrollBehavior(),
     scaffoldMessengerKey: rootMessengerKey,
     theme: AppTheme.light(),
     darkTheme: AppTheme.dark(),
