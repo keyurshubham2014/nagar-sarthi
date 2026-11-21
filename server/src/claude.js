@@ -3,13 +3,16 @@ import path from 'node:path';
 import Anthropic from '@anthropic-ai/sdk';
 import { config, anthropicKey } from './config.js';
 import { notFound, badRequest } from './errors.js';
+import { notice } from './notice.js';
 
 /**
  * Claude feature registry. Later tasks add entries (notice, brief, intake, question):
  *   features.notice = {
- *     buildPrompt(body, audit) -> { system?, prompt, maxTokens? },
+ *     prepare?(body, audit) -> ctx  // optional: validate (throw ApiError for 4xx), select rows
+ *     buildPrompt(body, audit, ctx) -> { system?, prompt, maxTokens? },
  *     fallbackKey(body) -> string   // key into server/fallbacks/notice.json
  *   }
+ * Fallback text may use {{name}} tokens, filled from ctx.vars (see notice.js).
  * and create server/fallbacks/<name>.json with a "default" entry.
  * body is the parsed request JSON (always an object); validate what you read from it.
  */
@@ -23,7 +26,11 @@ export const features = {
     }),
     fallbackKey: (body) => (typeof body.key === 'string' ? body.key : 'default'),
   },
+  notice,
 };
+
+// Fallback text may hold {{name}} tokens, filled from prepare()'s `vars`.
+const fill = (text, vars = {}) => text.replace(/\{\{(\w+)\}\}/g, (m, k) => (Object.hasOwn(vars, k) ? vars[k] : m));
 
 let client;
 function getClient() {
@@ -50,12 +57,14 @@ export async function relay(name, body, audit) {
   if (body === null || typeof body !== 'object' || Array.isArray(body)) {
     throw badRequest('Body must be a JSON object');
   }
+  // Optional prepare(body, audit): validates input (throws 4xx) and selects data for prompt and fallback.
+  const ctx = feature.prepare ? feature.prepare(body, audit) : {};
 
   const c = getClient();
   if (c) {
     const started = Date.now();
     try {
-      const { system, prompt, maxTokens = 1024 } = feature.buildPrompt(body, audit);
+      const { system, prompt, maxTokens = 1024 } = feature.buildPrompt(body, audit, ctx);
       const msg = await c.messages.create(
         {
           model: config.claudeModel,
@@ -85,5 +94,5 @@ export async function relay(name, body, audit) {
   } catch {
     /* bad body shape: default entry */
   }
-  return { text: await fallbackText(name, key), source: 'fallback' };
+  return { text: fill(await fallbackText(name, key), ctx.vars), source: 'fallback' };
 }

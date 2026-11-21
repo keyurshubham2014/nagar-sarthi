@@ -2,7 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/map/civic_map.dart';
+import '../../core/flag_strings.dart';
 import '../../core/theme/tokens.dart';
+import '../officer/officer_data.dart';
+import '../officer/officer_panels.dart';
+import '../officer/panel.dart';
 import 'map_data.dart';
 import 'map_layers.dart';
 import 'map_sheets.dart';
@@ -20,7 +24,6 @@ class MapHomeScreen extends ConsumerStatefulWidget {
 }
 
 class _MapHomeScreenState extends ConsumerState<MapHomeScreen> {
-  final Set<String> _visible = {for (final l in mapLayers) if (l.defaultOn) l.id};
   bool _tilesFailed = false;
   bool? _legendOpen; // null: open on wide screens, collapsed on phones
 
@@ -38,8 +41,10 @@ class _MapHomeScreenState extends ConsumerState<MapHomeScreen> {
     final async = ref.watch(mapDataProvider);
     final data = async.value;
     final disclaimer = data?.disclaimer ?? kDefaultDisclaimer;
+    final visible = ref.watch(visibleLayersProvider);
     final legendOpen = _legendOpen ?? MediaQuery.sizeOf(context).width >= 600;
-    final active = [for (final l in mapLayers) if (_visible.contains(l.id)) l];
+    final wide = MediaQuery.sizeOf(context).width >= kSidePanelBreakpoint;
+    final active = [for (final l in mapLayers) if (visible.contains(l.id)) l];
 
     final layerCtx = data == null
         ? null
@@ -93,14 +98,29 @@ class _MapHomeScreenState extends ConsumerState<MapHomeScreen> {
                       padding: const EdgeInsets.only(right: AppSpacing.s8),
                       child: FilterChip(
                         label: Text(l.label),
-                        selected: _visible.contains(l.id),
-                        onSelected: (on) => setState(() => on ? _visible.add(l.id) : _visible.remove(l.id)),
+                        selected: visible.contains(l.id),
+                        onSelected: (on) {
+                          ref.read(visibleLayersProvider.notifier).set(l.id, on);
+                          if (on && l.id == nextRupeeLayerId && ref.read(nextRupeeWardProvider) == null) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('Tap a ward, then "$kNextRupeeAction"')),
+                            );
+                          }
+                        },
                       ),
                     ),
                 ],
               ),
             ),
           ),
+          if (data != null)
+            Positioned(
+              top: 56,
+              left: AppSpacing.s8,
+              right: wide ? null : AppSpacing.s8,
+              width: wide ? 400 : null,
+              child: WarrantyHeroCard(data: data),
+            ),
           if (async.isLoading) ...[
             const Positioned(top: 0, left: 0, right: 0, child: LinearProgressIndicator()),
             const Center(child: _LoadingCard()),
@@ -149,6 +169,7 @@ class _MapHomeScreenState extends ConsumerState<MapHomeScreen> {
               ],
             ),
           ),
+          const Positioned.fill(child: PanelHost()),
         ],
       ),
     );

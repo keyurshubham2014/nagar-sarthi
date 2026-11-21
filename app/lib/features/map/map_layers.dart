@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/flag_strings.dart';
 import '../../core/format.dart';
+import '../officer/next_rupee.dart';
 import 'map_data.dart';
 
 /// What a layer builder gets: the loaded data and the tap callbacks.
@@ -65,13 +68,8 @@ const Map<String, Color> roadStatusColors = {
   'double_billing': Color(0xFF1565C0),
   'clean': Color(0xFF2E7D32),
 };
-const Map<String, String> roadStatusLabels = {
-  'dlp_paid': 'Paid during defect liability',
-  'fix_failed': 'Fix failed',
-  'over_rate': 'Over rate card',
-  'double_billing': 'Double billed',
-  'clean': 'No flags',
-};
+// Wording comes from the shared strings file (REQ-N-006).
+final Map<String, String> roadStatusLabels = {...flagLabels, 'clean': kNoFlags};
 
 final List<MapLayerDef> mapLayers = [
   MapLayerDef(
@@ -98,7 +96,26 @@ final List<MapLayerDef> mapLayers = [
         LegendEntry(roadStatusLabels[e.key]!, e.value, line: true),
     ],
   ),
+  MapLayerDef(
+    id: nextRupeeLayerId,
+    label: 'Next rupee',
+    legendTitle: 'Next rupee pins',
+    defaultOn: false,
+    legend: nextRupeeLegend,
+    build: (_) => const NextRupeeLayer(),
+  ),
 ];
+
+const String nextRupeeLayerId = 'next_rupee';
+
+/// Which layers are on. A provider so panels can turn a layer on (next rupee).
+class VisibleLayers extends Notifier<Set<String>> {
+  @override
+  Set<String> build() => {for (final l in mapLayers) if (l.defaultOn) l.id};
+  void set(String id, bool on) => state = on ? {...state, id} : ({...state}..remove(id));
+}
+
+final visibleLayersProvider = NotifierProvider<VisibleLayers, Set<String>>(VisibleLayers.new);
 
 class _WardLayer extends StatefulWidget {
   const _WardLayer(this.ctx);

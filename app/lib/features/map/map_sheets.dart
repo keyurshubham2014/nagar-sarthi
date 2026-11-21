@@ -1,56 +1,13 @@
 import 'package:flutter/material.dart';
 
-import '../../core/format.dart';
 import '../../core/theme/tokens.dart';
+import '../officer/officer_panels.dart';
 import 'map_data.dart';
-import 'map_layers.dart';
 
-// TASK-02 placeholder sheets. TASK-03 replaces the ward and road sheet bodies
-// with detail panels; the map calls these through MapHomeScreen's tap callbacks.
+// Map taps open the officer panels (TASK-03): ward money trail and road work orders.
+void showWardSheet(BuildContext context, Ward ward) => openWardPanel(context, ward.code, ward.name);
 
-Future<void> showWardSheet(BuildContext context, Ward ward) => _sheet(
-  context,
-  title: '${ward.code} · ${ward.name}',
-  headline: formatInr(ward.flaggedInr),
-  caption: '${formatPercent(ward.flaggedShare)} of ${formatInr(ward.spend)} spend needs review',
-);
-
-Future<void> showRoadSheet(BuildContext context, Road road) => _sheet(
-  context,
-  title: road.name,
-  headline: roadStatusLabels[road.status] ?? road.status,
-  headlineColor: roadStatusColors[road.status],
-  caption: 'Ward ${road.wardCode} · ${formatInr(road.spend)} spent on this segment',
-);
-
-Future<void> _sheet(
-  BuildContext context, {
-  required String title,
-  required String headline,
-  required String caption,
-  Color? headlineColor,
-}) {
-  final t = Theme.of(context).textTheme;
-  return showModalBottomSheet<void>(
-    context: context,
-    builder: (_) => SafeArea(
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(AppSpacing.gutter, 0, AppSpacing.gutter, AppSpacing.s24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(title, style: t.titleLarge),
-            const SizedBox(height: AppSpacing.s12),
-            Text(headline, style: t.displaySmall?.copyWith(color: headlineColor)),
-            const SizedBox(height: AppSpacing.s4),
-            Text(caption, style: t.bodyMedium),
-          ],
-        ),
-      ),
-    ),
-  );
-}
+void showRoadSheet(BuildContext context, Road road) => openRoadPanel(context, road.id, road.name);
 
 /// Departments: only roads has data; the rest are listed with no figures.
 Future<void> showDepartmentsSheet(BuildContext context) {

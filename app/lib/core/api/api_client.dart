@@ -84,6 +84,14 @@ class ApiClient {
       _get('/api/next-rupee/${Uri.encodeComponent(ward)}');
   Future<List<dynamic>> timeline() => _get('/api/timeline');
 
+  /// Flag rows from audit.json, filtered by any of ward, road and type.
+  Future<List<dynamic>> flags({String? ward, String? road, String? type}) => _call(
+    () => _dio.get<List<dynamic>>(
+      '/api/flags',
+      queryParameters: {'ward': ?ward, 'road': ?road, 'type': ?type},
+    ),
+  );
+
   /// Calls a registered server feature (`ping`, later `notice`, `brief`...).
   /// Pass `key` in [body] to pick a saved fallback entry.
   Future<ClaudeReply> claude(String feature, Map<String, dynamic> body) async {

@@ -40,6 +40,8 @@ app.get('/api/wards', (_req, res) => {
       remaining: w.remaining,
       flagged_inr: w.flagged_inr,
       flagged_share: w.flagged_share,
+      dlp_paid_inr: w.by_flag_type?.dlp_paid?.inr ?? 0,
+      dlp_paid_count: w.by_flag_type?.dlp_paid?.count ?? 0,
       centroid_lat: w.centroid_lat,
       centroid_lon: w.centroid_lon,
     })),
@@ -73,8 +75,25 @@ app.get('/api/contractors', (_req, res) => {
   res.json(Object.entries(audit.contractors).map(([id, c]) => ({ id, ...c })));
 });
 
+// Includes the ward's hospitals, schools and flood hotspots for the pin layer.
 app.get('/api/next-rupee/:ward', (req, res) => {
-  res.json({ ward: req.params.ward, ...lookup(audit.next_rupee, req.params.ward, `Ward '${req.params.ward}'`) });
+  const ward = req.params.ward;
+  res.json({
+    ward,
+    ...lookup(audit.next_rupee, ward, `Ward '${ward}'`),
+    facilities: audit.facilities.filter((f) => f.ward_code === ward),
+    hotspots: audit.hotspots.filter((h) => h.ward_code === ward),
+  });
+});
+
+// Flag rows filtered by ?ward=, ?road=, ?type= (all optional, combined with AND).
+app.get('/api/flags', (req, res) => {
+  const { ward, road, type } = req.query;
+  res.json(
+    audit.flags.filter(
+      (f) => (!ward || f.ward_code === ward) && (!road || f.road_id === road) && (!type || f.type === type),
+    ),
+  );
 });
 
 app.get('/api/timeline', (_req, res) => res.json(audit.timeline));
