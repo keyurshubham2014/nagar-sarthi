@@ -125,7 +125,6 @@ def build():
     base = {}
     for m, js in by_method.items():
         base[m] = {k: mean([j[k] for j in js]) for k in ("sla", "reo", "sla_adj", "reo_adj")}
-    g_ratio, g_ratio_adj = med([w["ratio"] for w in wo]), med([w["ratio"] for w in wo if not w["ctx"]])
 
     def metrics(js):
         d = lambda k: mean([j[k] for j in js]) - mean([base[j["repair_method"]][k] for j in js])
@@ -141,20 +140,31 @@ def build():
     contractors = {}
     byc = defaultdict(list)
     for w in wo: byc[w["contractor_id"]].append(w)
+    # Strength/improve: three metrics, each oriented higher = better and turned into a z-score across contractors.
+    # speed/durability = context-adjusted, same-method-relative; pricing = global over_rate share minus own share.
+    g_over = mean(["over_rate" in w["flags"] for w in wo])
+    raw = {cid: {"speed": metrics(js)["adjusted"]["sla_vs_method_avg"], "durability": -metrics(js)["adjusted"]["reopen_vs_method_avg"],
+                 "pricing": g_over - mean(["over_rate" in j["flags"] for j in js])} for cid, js in byc.items()}
+    z = {cid: {} for cid in raw}
+    for k in ("speed", "durability", "pricing"):
+        mu, sd = mean([r[k] for r in raw.values()]), st.pstdev([r[k] for r in raw.values()])
+        for cid, r in raw.items(): z[cid][k] = r2((r[k] - mu) / sd) if sd else 0
+    NAMES = {"speed": "Speed (SLA)", "durability": "Durability (repairs that last)", "pricing": "Pricing against the rate card"}
     for cid, js in byc.items():
-        m = metrics(js); a = m["adjusted"]
-        cand = {"SLA performance": a["sla_vs_method_avg"], "Re-open rate": -a["reopen_vs_method_avg"],
-                "Pricing against rate card": g_ratio_adj - a["median_cost_ratio"]}
-        best, worst = max(cand, key=cand.get), min(cand, key=cand.get)
+        m = metrics(js)
+        m["z"] = z[cid]
+        best, worst = max(z[cid], key=z[cid].get), min(z[cid], key=z[cid].get)
+        strength = (f"{NAMES[best]}: better than most contractors on the same kind of work." if z[cid][best] > 0
+                    else f"Closest to typical on {NAMES[best].lower()}.")
+        improve = (f"{NAMES[worst]}: below most contractors on the same kind of work. Needs review." if z[cid][worst] < 0
+                   else "No area is below typical.")
         by_ward = {}
         for code, wj in sorted(defaultdict(list, {c: [j for j in js if j["ward_code"] == c] for c in {j["ward_code"] for j in js}}).items()):
             ok = len(wj) >= MIN_JOBS_PER_WARD
             by_ward[code] = {"jobs": len(wj), "rated": ok, "metrics": metrics(wj) if ok else None,
                              "reason_if_not_rated": None if ok else f"Only {len(wj)} jobs in this ward; minimum is {MIN_JOBS_PER_WARD}."}
         contractors[cid] = {"name": js[0]["contractor_name"], "jobs": len(js), "spend": r2(sum(j["cost"] for j in js)),
-            "metrics": m, "strength": (f"{best}: better than the average for the same repair methods." if cand[best] > 0
-                         else f"Closest to the same-method average on {best.lower()}."),
-            "improve": f"{worst}: furthest from the average for the same repair methods.",
+            "metrics": m, "strength": strength, "improve": improve,
             "by_ward": by_ward,
             "work_order_ids": {"all": [j["work_order_id"] for j in js], "sla_missed": [j["work_order_id"] for j in js if j["missed"]],
                                "reopened": [j["work_order_id"] for j in js if j["reopened"]],
