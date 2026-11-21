@@ -5,6 +5,7 @@ import csv, json, math, statistics as st, sys
 from collections import defaultdict, Counter
 from datetime import datetime, date, timedelta
 from pathlib import Path
+from linker import run as link
 
 ROOT = Path(__file__).resolve().parent.parent
 DATA, OUT = ROOT / "data", ROOT / "engine" / "out" / "audit.json"
@@ -331,6 +332,11 @@ def build():
             d = (w["c"].date() + timedelta(days=30)).isoformat()
             if d in tl: tl[d]["reopens"].append({"work_order_id": w["work_order_id"], "road_id": w["road_id"]})
 
+    # ---- linker: complaints -> issues -> work orders (engine/linker.py); adds keys, renames none ----
+    issue_list, linker, per, ward_issues = link(comps, wo, locs, roads_t, wards_t, rows("social_posts"))
+    for cid, e in per.items(): complaints[cid].update(e)
+    for code, v in ward_issues.items(): wards[code]["issues"] = v
+
     cnt = Counter(f["type"] for f in flags)
     inr = defaultdict(float)
     for f in flags: inr[f["type"]] += f["cost_inr"]
@@ -340,7 +346,8 @@ def build():
                        "open_complaints_skipped_no_ward": skipped}}
     def pt(rs): return [{**r, **{k: r6(float(r[k])) for k in ("lat", "lon")}} for r in rs]
     return {"meta": meta, "flags": flags, "wards": wards, "roads": roads, "contractors": contractors, "next_rupee": next_rupee,
-            "timeline": list(tl.values()), "complaints": complaints, "facilities": pt(fac), "hotspots": pt(hot)}
+            "timeline": list(tl.values()), "complaints": complaints, "facilities": pt(fac), "hotspots": pt(hot),
+            "issues": issue_list, "linker": linker}
 
 
 def main():
@@ -354,7 +361,19 @@ def main():
         want = {"over_rate": 109, "double_billing": 45, "dlp_paid": 493, "fix_failed": 611}
         for k, n in want.items(): assert got[k] == n, f"{k}: got {got[k]}, want {n}"
         assert all(abs(sum(i["parts"].values()) - i["score"]) < 0.011 for n in out["next_rupee"].values() for i in n["items"]), "score parts"
-        print("check OK:", {**got})
+        # linker: every in-scope complaint in exactly one issue, no empty issue, ids unique, totals add up
+        iss, lk, cm = out["issues"], out["linker"], out["complaints"]
+        member = Counter(cid for i in iss for cid in i["complaint_ids"])
+        assert all(cid in cm for cid in member), "issue lists an unknown complaint"
+        assert all(n == 1 for n in member.values()), "complaint in more than one issue"
+        assert set(member) == {k for k, e in cm.items() if e["scope"] == "in_scope"}, "in-scope complaint without an issue"
+        assert all(cm[k]["issue_id"] is None for k in cm if cm[k]["scope"] != "in_scope"), "noise complaint in an issue"
+        assert all(i["complaint_ids"] or i["social_post_ids"] for i in iss), "empty issue"
+        assert len({i["id"] for i in iss}) == len(iss), "duplicate issue id"
+        assert lk["raw_complaints"] == len(cm) == lk["in_issues"] + lk["noise"] + lk["out_of_scope"], "linker totals"
+        assert lk["in_issues"] == sum(member.values()) and lk["issues"] == len(iss), "linker issue totals"
+        assert sum(v["count"] for v in lk["issues_by_outcome"].values()) == len(iss), "outcome totals"
+        print("check OK:", {**got}, f"| {lk['raw_complaints']} complaints -> {lk['issues']} issues")
 
 
 if __name__ == "__main__":
