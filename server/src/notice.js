@@ -107,8 +107,10 @@ Rules for the letter:
 - Under 250 words.
 - End with one line noting that this draft uses synthetic data from a prototype and is not a BMC document.
 Return only the letter text.`,
-      maxTokens: 700,
+      maxTokens: 1500,
     };
   },
   fallbackKey: (body) => body.flag_type,
+  // A live letter must cite every work order id it was given.
+  validate: (text, sel) => sel.rows.every((r) => text.includes(r.id)),
 };

@@ -27,15 +27,37 @@ const nextRupeeLegend = [
 
 /// Turns on the next-rupee pins for [ward] and shows its ranked list.
 void showNextRupee(WidgetRef ref, String ward) {
+  ref.read(panelProvider.notifier).push(_listPage(ward));
   ref.read(nextRupeeWardProvider.notifier).set(ward);
   ref.read(visibleLayersProvider.notifier).set(nextRupeeLayerId, true);
-  ref.read(panelProvider.notifier).push(PanelPage('Next rupee · Ward $ward', NextRupeeList(ward)));
+}
+
+PanelPage _listPage(String ward) => PanelPage('Next rupee · Ward $ward', NextRupeeList(ward), ward: ward);
+
+/// Pins belong to [ward]: if the top panel page is not that ward's, start a fresh stack at its list.
+void _ensureWardOnTop(WidgetRef ref, String ward) {
+  final pages = ref.read(panelProvider);
+  if (pages.isEmpty || pages.last.ward != ward) ref.read(panelProvider.notifier).open(_listPage(ward));
 }
 
 void _openItem(WidgetRef ref, String ward, Json item) {
-  final panel = ref.read(panelProvider.notifier);
-  if (ref.read(panelProvider).isEmpty) panel.open(PanelPage('Next rupee · Ward $ward', NextRupeeList(ward)));
-  panel.push(PanelPage('#${item['rank']} · ${item['issue']['category']}, ${item['issue']['locality']}', NextRupeeDetail(item)));
+  _ensureWardOnTop(ref, ward);
+  ref.read(panelProvider.notifier).push(PanelPage(
+    '#${item['rank']} · ${item['issue']['category']}, ${item['issue']['locality']}',
+    NextRupeeDetail(item),
+    ward: ward,
+  ));
+}
+
+/// Several items at one spot: one pin, tap opens a chooser listing them.
+void _openSpot(WidgetRef ref, String ward, List<Json> items) {
+  if (items.length == 1) return _openItem(ref, ward, items.single);
+  _ensureWardOnTop(ref, ward);
+  ref.read(panelProvider.notifier).push(PanelPage(
+    '${items.length} items at this spot · Ward $ward',
+    PanelList(children: [for (final i in items) _ItemRow(item: i, onTap: () => _openItem(ref, ward, i))]),
+    ward: ward,
+  ));
 }
 
 LatLng? _ll(Map m) =>
@@ -66,7 +88,12 @@ class NextRupeeLayer extends ConsumerWidget {
       );
     }
 
-    final items = [for (final i in (nr['items'] as List? ?? const [])) i as Json];
+    // Group items that share a point (rank order kept), so stacked pins become one tappable pin.
+    final spots = <String, List<Json>>{};
+    for (final i in (nr['items'] as List? ?? const [])) {
+      final p = _ll(i as Map);
+      if (p != null) (spots['${p.latitude.toStringAsFixed(5)},${p.longitude.toStringAsFixed(5)}'] ??= []).add(i as Json);
+    }
     return MarkerLayer(
       markers: [
         for (final f in (nr['facilities'] as List? ?? const []))
@@ -76,34 +103,51 @@ class NextRupeeLayer extends ConsumerWidget {
                 : place(f, Icons.school, kSchool, 'School'),
         for (final h in (nr['hotspots'] as List? ?? const []))
           if (_ll(h) != null) place(h, Icons.water_drop, kHotspot, 'Flood hotspot'),
-        // Reverse so rank 1 paints on top.
-        for (final item in items.reversed)
-          if (_ll(item) != null)
-            Marker(
-              point: _ll(item)!,
-              width: 34,
-              height: 34,
-              child: Semantics(
-                button: true,
-                label: 'Next rupee rank ${item['rank']}: ${item['issue']['category']}',
-                child: GestureDetector(
-                  onTap: () => _openItem(ref, ward, item),
-                  child: Container(
-                    alignment: Alignment.center,
-                    decoration: BoxDecoration(
-                      color: item['funded'] == true ? kFundedPin : kUnfundedPin,
-                      shape: BoxShape.circle,
-                      border: Border.all(color: Colors.white, width: 2),
-                      boxShadow: const [BoxShadow(blurRadius: 3, color: Color(0x55000000))],
+        // Reverse so the best-ranked spot paints on top.
+        for (final group in spots.values.toList().reversed)
+          Marker(
+            point: _ll(group.first)!,
+            width: 34,
+            height: 34,
+            child: Semantics(
+              button: true,
+              label: group.length == 1
+                  ? 'Next rupee rank ${group.first['rank']}: ${group.first['issue']['category']}'
+                  : '${group.length} next rupee items here, ranks ${group.map((i) => i['rank']).join(', ')}',
+              child: GestureDetector(
+                onTap: () => _openSpot(ref, ward, group),
+                child: Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    Container(
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(
+                        color: group.any((i) => i['funded'] == true) ? kFundedPin : kUnfundedPin,
+                        shape: BoxShape.circle,
+                        border: Border.all(color: Colors.white, width: 2),
+                        boxShadow: const [BoxShadow(blurRadius: 3, color: Color(0x55000000))],
+                      ),
+                      child: Text(
+                        '${group.first['rank']}',
+                        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 14),
+                      ),
                     ),
-                    child: Text(
-                      '${item['rank']}',
-                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 14),
-                    ),
-                  ),
+                    if (group.length > 1)
+                      Positioned(
+                        right: -6,
+                        top: -6,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                          decoration: BoxDecoration(color: Colors.black87, borderRadius: BorderRadius.circular(8)),
+                          child: Text('+${group.length - 1}',
+                              style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w700)),
+                        ),
+                      ),
+                  ],
                 ),
               ),
             ),
+          ),
       ],
     );
   }

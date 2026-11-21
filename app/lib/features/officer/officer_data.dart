@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/api/api_client.dart';
+import 'panel.dart';
 
 // No auto-retry: failures show the panel's error state with its Retry button at once.
 Duration? _noRetry(int _, Object _) => null;
@@ -33,9 +34,17 @@ final nextRupeeProvider = FutureProvider.family<Json, String>(
 );
 
 /// Ward whose next-rupee pins are on the map (null: none chosen yet).
+/// Cleared as soon as no open panel page belongs to that ward (panel closed,
+/// or another ward opened), so pins never outlive their ward's panel.
 class NextRupeeWard extends Notifier<String?> {
   @override
-  String? build() => null;
+  String? build() {
+    ref.listen(panelProvider, (_, pages) {
+      if (state != null && !pages.any((p) => p.ward == state)) state = null;
+    });
+    return null;
+  }
+
   void set(String? ward) => state = ward;
 }
 

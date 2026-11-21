@@ -8,6 +8,9 @@ const String kNeedsReview = 'Needs review';
 const String kToBeClaimed = 'To be claimed and verified';
 const String kNoFlags = 'No flags';
 
+/// Road status chip when the road is otherwise clean but some jobs ran slow (sla_missed only).
+const String kSlowerSomeJobs = 'Slower than typical on some jobs';
+
 /// Display order, most serious first (matches the engine's road status tie-break).
 const List<String> flagOrder = ['dlp_paid', 'fix_failed', 'over_rate', 'double_billing', 'sla_missed'];
 

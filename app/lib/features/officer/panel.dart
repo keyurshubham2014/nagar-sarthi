@@ -11,9 +11,12 @@ const double kSidePanelBreakpoint = 900;
 /// One page in the officer panel. [body] builds a `ListView(primary: true)`
 /// (use [PanelList]) so the host can drive its scrolling.
 class PanelPage {
-  const PanelPage(this.title, this.body);
+  const PanelPage(this.title, this.body, {this.ward});
   final String title;
   final Widget body;
+
+  /// Ward this page belongs to, if any. Next-rupee pins stay only while a page for their ward is open.
+  final String? ward;
 }
 
 /// The officer panel is a stack of pages: [open] replaces it, [push] drills in,

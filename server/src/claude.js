@@ -12,7 +12,9 @@ import { brief } from './brief.js';
  *     prepare?(body, audit) -> ctx  // optional: validate (throw ApiError for 4xx), select rows
  *     buildPrompt(body, audit, ctx) -> { system?, prompt, maxTokens? },
  *     fallbackKey(body) -> string   // key into server/fallbacks/notice.json
+ *     validate?(text, ctx) -> bool  // optional: false sends the saved fallback instead of the live text
  *   }
+ * A live reply cut off at max_tokens also falls back.
  * Fallback text may use {{name}} tokens, filled from ctx.vars (see notice.js).
  * and create server/fallbacks/<name>.json with a "default" entry.
  * body is the parsed request JSON (always an object); validate what you read from it.
@@ -79,11 +81,16 @@ export async function relay(name, body, audit) {
         { timeout: config.claudeTimeoutMs },
       );
       const text = msg.content.filter((b) => b.type === 'text').map((b) => b.text).join('');
-      if (text) {
+      if (msg.stop_reason === 'max_tokens') {
+        console.warn(`[claude] ${name} hit max_tokens, using fallback`);
+      } else if (text && feature.validate && !feature.validate(text, ctx)) {
+        console.warn(`[claude] ${name} draft failed validation, using fallback`);
+      } else if (text) {
         console.log(`[claude] ${name} live in ${Date.now() - started} ms`);
         return { text, source: 'live' };
+      } else {
+        console.warn(`[claude] ${name} returned no text, using fallback`);
       }
-      console.warn(`[claude] ${name} returned no text, using fallback`);
     } catch (e) {
       // Log status/name only: SDK error messages can echo request details.
       console.warn(`[claude] ${name} failed after ${Date.now() - started} ms (${e.status ?? e.name}), using fallback`);

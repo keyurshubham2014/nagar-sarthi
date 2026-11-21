@@ -16,7 +16,7 @@ PanelStack _panel(BuildContext context) => ProviderScope.containerOf(context, li
 
 /// Opens the ward money trail as the only panel page.
 void openWardPanel(BuildContext context, String code, String name) =>
-    _panel(context).open(PanelPage('Ward $code · $name', WardPanel(code)));
+    _panel(context).open(PanelPage('Ward $code · $name', WardPanel(code), ward: code));
 
 void openRoadPanel(BuildContext context, String id, String name) =>
     _panel(context).open(PanelPage(name, RoadPanel(id)));
@@ -289,7 +289,10 @@ class RoadPanel extends ConsumerWidget {
           spacing: AppSpacing.s8,
           runSpacing: AppSpacing.s4,
           children: [
-            Tag(roadStatusLabels[status] ?? status, bg: flagColor(status).withValues(alpha: 0.12), fg: flagColor(status)),
+            if (status == 'clean' && flags.any((f) => f['type'] == 'sla_missed'))
+              Tag(kSlowerSomeJobs, bg: c.warningTint, fg: c.warning)
+            else
+              Tag(roadStatusLabels[status] ?? status, bg: flagColor(status).withValues(alpha: 0.12), fg: flagColor(status)),
             if (r['under_dlp'] == 'Y') Tag(kUnderWarranty, bg: c.infoTint, fg: c.info, icon: Icons.verified_user_outlined),
             Tag('Ward ${r['ward_code']} · ${r['road_type'] ?? ''}', bg: c.surfaceAlt, fg: c.textSecondary),
           ],
@@ -442,7 +445,7 @@ class DlpWardRanking extends ConsumerWidget {
         const SizedBox(height: AppSpacing.s8),
         for (final (i, w) in wards.indexed)
           InkWell(
-            onTap: () => ref.read(panelProvider.notifier).push(PanelPage('Ward ${w.code} · ${w.name}', WardPanel(w.code))),
+            onTap: () => ref.read(panelProvider.notifier).push(PanelPage('Ward ${w.code} · ${w.name}', WardPanel(w.code), ward: w.code)),
             child: Padding(
               padding: const EdgeInsets.symmetric(vertical: AppSpacing.s4),
               child: LabelledBar(
