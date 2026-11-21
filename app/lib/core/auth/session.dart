@@ -63,8 +63,8 @@ class SessionNotifier extends Notifier<Session?> {
     _save(null);
     rootMessengerKey.currentState?.showSnackBar(
       SnackBar(
-        content: const Text('Your session has ended. Sign in again to continue.'),
-        action: SnackBarAction(label: 'Sign in', onPressed: () => appRouter.push('/sign-in')),
+        content: Text(translate('Your session has ended. Sign in again to continue.', ref.read(langProvider))),
+        action: SnackBarAction(label: translate('Sign in', ref.read(langProvider)), onPressed: () => appRouter.push('/sign-in')),
       ),
     );
   }
@@ -88,7 +88,7 @@ Future<bool> ensureRole(BuildContext context, {Set<String>? roles, required Stri
     builder: (c) => AlertDialog(
       icon: const Icon(Icons.lock_outline),
       title: Text(c.tr(signedIn ? 'Not available for your role' : 'Please sign in')),
-      content: Text(why),
+      content: Text(c.tr(why)),
       actions: [
         TextButton(onPressed: () => Navigator.pop(c, false), child: Text(c.tr('Not now'))),
         FilledButton(onPressed: () => Navigator.pop(c, true), child: Text(c.tr(signedIn ? 'Switch account' : 'Sign in'))),

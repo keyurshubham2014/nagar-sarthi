@@ -1,10 +1,10 @@
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'i18n_staff.dart';
 import 'prefs.dart';
 
-/// App language for the citizen surfaces, the sign-in screen and the map home.
-/// Officer and corporator panels stay in English (PRD).
+/// App language for every screen: citizen, officer and corporator (staff strings in i18n_staff.dart).
 const Map<String, String> appLanguages = {'en': 'English', 'hi': 'हिंदी', 'mr': 'मराठी'};
 
 class LangNotifier extends Notifier<String> {
@@ -32,11 +32,14 @@ extension Tr on BuildContext {
 
   /// [en] translated, with `{name}` filled from [args]. The English text is the key, so a
   /// missing translation shows English, never a key.
-  String tr(String en, [Map<String, Object?> args = const {}]) {
-    var s = _strings[en]?[lang] ?? en;
-    args.forEach((k, v) => s = s.replaceAll('{$k}', '$v'));
-    return s;
-  }
+  String tr(String en, [Map<String, Object?> args = const {}]) => translate(en, lang, args);
+}
+
+/// [tr] without a BuildContext (e.g. a snackbar raised from a provider): pass the language.
+String translate(String en, String lang, [Map<String, Object?> args = const {}]) {
+  var s = (_strings[en] ?? staffStrings[en])?[lang] ?? en;
+  args.forEach((k, v) => s = s.replaceAll('{$k}', '$v'));
+  return s;
 }
 
 // English -> {hi, mr}. Plain words; rupee figures stay in lakh / crore numerals.

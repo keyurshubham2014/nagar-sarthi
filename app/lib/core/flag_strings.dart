@@ -4,7 +4,10 @@
 /// Never "fraud", "scam", "corrupt" or "overcharged by".
 library;
 
+import 'package:flutter/widgets.dart';
+
 import 'format.dart';
+import 'i18n.dart';
 
 const String kNeedsReview = 'Needs review';
 const String kToBeClaimed = 'To be claimed and verified';
@@ -37,17 +40,37 @@ String flagLabel(String type) => flagLabels[type] ?? type;
 
 String _day(Object? s) => '${s ?? '—'}'.split(' ').first;
 
-/// One plain line on why a flag row needs review, from its evidence.
-String flagReason(Map f) {
+/// One plain line on why a flag row needs review, from its evidence, in the app language.
+String flagReason(BuildContext context, Map f) {
   final e = (f['evidence'] as Map?) ?? const {};
+  final cost = formatInr(f['cost_inr'] as num? ?? 0);
   return switch (f['type']) {
-    'dlp_paid' => 'Billed ${formatInr(f['cost_inr'] as num? ?? 0)} while under warranty (resurfaced ${_day(e['last_resurfaced'])})',
-    'fix_failed' => 'Re-opened within 30 days of the repair on ${_day(e['completed_at'])}',
-    'over_rate' => 'Billed ${e['ratio'] ?? f['ratio']}× the standard rate (${formatInr(f['cost_inr'] as num? ?? 0)} vs ${formatInr(f['expected_inr'] as num? ?? 0)})',
-    'double_billing' => 'Billed again ${e['days_apart']} days after ${e['previous_work_order_id']}, no complaint linked',
-    'sla_missed' => 'Took longer than the ${e['sla_hours']}-hour standard for ${e['repair_method'] ?? 'this work'}',
-    _ => '${f['reason'] ?? kNeedsReview}',
+    'dlp_paid' => context.tr('Billed {amount} while under warranty (resurfaced {d})', {'amount': cost, 'd': _day(e['last_resurfaced'])}),
+    'fix_failed' => context.tr('Re-opened within 30 days of the repair on {d}', {'d': _day(e['completed_at'])}),
+    'over_rate' => context.tr('Billed {r}× the standard rate ({cost} vs {expected})', {
+      'r': e['ratio'] ?? f['ratio'],
+      'cost': cost,
+      'expected': formatInr(f['expected_inr'] as num? ?? 0),
+    }),
+    'double_billing' => context.tr('Billed again {n} days after {wo}, no complaint linked', {'n': e['days_apart'], 'wo': e['previous_work_order_id']}),
+    'sla_missed' => context.tr('Took longer than the {h}-hour standard for {method}', {
+      'h': e['sla_hours'],
+      'method': context.tr('${e['repair_method'] ?? 'this work'}'),
+    }),
+    _ => context.tr('${f['reason'] ?? kNeedsReview}'),
   };
+}
+
+/// The engine's scorecard sentences ("Speed (SLA): better than most contractors on the same kind of
+/// work.", "...: below most ... Needs review.", "No area is ... typical."), in the app language.
+String scorecardSentence(BuildContext context, Object? s) {
+  final text = '${s ?? ''}';
+  final m = RegExp(r'^(.+?): (better than|below) most contractors on the same kind of work\.( Needs review\.)?$').firstMatch(text);
+  if (m == null) return context.tr(text);
+  final line = context.tr(m[2] == 'better than' ? '{measure}: better than most contractors on the same kind of work.' : '{measure}: below most contractors on the same kind of work.', {
+    'measure': context.tr(m[1]!),
+  });
+  return m[3] == null ? line : '$line ${context.tr('Needs review.')}';
 }
 String flagStanding(String type) => type == 'dlp_paid' ? kToBeClaimed : kNeedsReview;
 

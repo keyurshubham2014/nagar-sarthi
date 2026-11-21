@@ -120,34 +120,36 @@ class _AuditListState extends ConsumerState<AuditList> {
   }
 
   String get _caption {
-    final n = _total == 1 ? '1 flag' : '$_total flags';
+    final n = _total == 1 ? context.tr('1 flag') : context.tr('{n} flags', {'n': _total});
     if (_type == 'sla_missed') return n;
-    return '$n · ${formatInr(_totalInr)} ${_type == 'dlp_paid' ? 'to be claimed and verified' : 'to review'}';
+    return '$n · ${context.tr(_type == 'dlp_paid' ? '{amount} to be claimed and verified' : '{amount} to review', {'amount': formatInr(_totalInr)})}';
   }
 
   bool get _filtered => _contractor != widget.contractor || _search.text.trim().isNotEmpty || _type != widget.type;
 
   String get _emptyText {
     final q = _search.text.trim();
-    if (q.isNotEmpty) return 'No work order or road matches "$q".';
-    final where = _allMumbai ? 'in Mumbai' : 'in Ward ${widget.ward}';
-    final who = _contractor == null ? '' : ' for this contractor';
-    if (_type != null) return 'No work orders $where$who are flagged "${flagShortLabels[_type] ?? _type}".';
-    return 'No work orders $where$who need review.';
+    if (q.isNotEmpty) return context.tr('No work order or road matches "{q}".', {'q': q});
+    final where = _allMumbai ? context.tr('in Mumbai') : context.tr('in Ward {w}', {'w': widget.ward});
+    final who = _contractor == null ? '' : ' ${context.tr('for this contractor')}';
+    if (_type != null) {
+      return context.tr('No work orders {where} are flagged "{flag}".', {'where': '$where$who', 'flag': context.tr(flagShortLabels[_type] ?? _type!)});
+    }
+    return context.tr('No work orders {where} need review.', {'where': '$where$who'});
   }
 
   Future<void> _pickContractor() async {
     final contractors = ref.read(_contractorsProvider).value;
     final picked = await showAppSheet<String>(
       context,
-      title: 'Contractor',
+      title: context.tr('Contractor'),
       builder: (sheet) => contractors == null
           ? Skeleton.rows(count: 4)
           : Column(
               mainAxisSize: MainAxisSize.min,
               children: [
                 ListRow(
-                  title: 'All contractors',
+                  title: sheet.tr('All contractors'),
                   chevron: false,
                   trailing: _contractor == null ? const Icon(Icons.check) : null,
                   onTap: () => Navigator.pop(sheet, ''),
@@ -184,7 +186,7 @@ class _AuditListState extends ConsumerState<AuditList> {
 
     Widget footer() {
       if (_error != null) {
-        return ErrorState(message: 'Could not load flags. $_error', onRetry: () => _load(reset: _items.isEmpty));
+        return ErrorState(message: '${context.tr('Could not load flags.')} $_error', onRetry: () => _load(reset: _items.isEmpty));
       }
       if (_loading || (more && _items.isNotEmpty)) {
         // Reached the end: fetch the next page.
@@ -195,7 +197,7 @@ class _AuditListState extends ConsumerState<AuditList> {
         return EmptyState(
           message: _emptyText,
           pictogram: PictogramKind.audit,
-          actionLabel: _filtered ? 'Clear filters' : null,
+          actionLabel: _filtered ? context.tr('Clear filters') : null,
           onAction: () => _set(() {
             _contractor = widget.contractor;
             _type = widget.type;
@@ -232,7 +234,7 @@ class _AuditListState extends ConsumerState<AuditList> {
             if (widget.allowAllMumbai) ...[
               Gutter(
                 child: SegmentedControl<bool>(
-                  segments: [(false, 'Ward ${widget.ward}'), (true, 'All Mumbai')],
+                  segments: [(false, context.tr('Ward {w}', {'w': widget.ward})), (true, context.tr('All Mumbai'))],
                   value: _allMumbai,
                   onChanged: (v) => _set(() => _allMumbai = v),
                 ),
@@ -242,14 +244,14 @@ class _AuditListState extends ConsumerState<AuditList> {
             FilterChipRow(
               children: [
                 FilterPill(
-                  label: contractorName == null ? 'Contractor' : '$contractorName'.replaceAll(' (synthetic)', ''),
+                  label: contractorName == null ? context.tr('Contractor') : '$contractorName'.replaceAll(' (synthetic)', ''),
                   icon: Icons.engineering_outlined,
                   selected: _contractor != null,
                   onTap: _pickContractor,
                 ),
                 for (final k in [null, ...flagOrder])
                   FilterPill(
-                    label: k == null ? 'All' : flagShortLabels[k] ?? k,
+                    label: context.tr(k == null ? 'All' : flagShortLabels[k] ?? k),
                     selected: _type == k,
                     onTap: () => _set(() => _type = k),
                   ),
@@ -267,7 +269,7 @@ class _AuditListState extends ConsumerState<AuditList> {
               padding: const EdgeInsets.symmetric(horizontal: AppSpacing.gutter, vertical: AppSpacing.s8),
               child: SearchField(
                 controller: _search,
-                hint: 'Work order or road',
+                hint: context.tr('Work order or road'),
                 onChanged: (_) {
                   _debounce?.cancel();
                   _debounce = Timer(const Duration(milliseconds: 350), () => _load(reset: true));
@@ -282,7 +284,7 @@ class _AuditListState extends ConsumerState<AuditList> {
         child: Padding(
           padding: const EdgeInsets.fromLTRB(AppSpacing.gutter, AppSpacing.s4, AppSpacing.gutter, AppSpacing.s4),
           child: Text(
-            _type == 'sla_missed' ? kSlaNoMoney : 'Biggest amounts first. Each work order counted once in the total.',
+            context.tr(_type == 'sla_missed' ? kSlaNoMoney : 'Biggest amounts first. Each work order counted once in the total.'),
             style: t.caption,
           ),
         ),
@@ -304,7 +306,7 @@ class _AuditListState extends ConsumerState<AuditList> {
     if (root) {
       return LargeTitleScaffold(
         title: widget.title!,
-        actions: [RoundIconButton(icon: Icons.location_on_outlined, tooltip: 'Change ward (Ward ${widget.ward})', onPressed: () => pickWard(context, ref))],
+        actions: [RoundIconButton(icon: Icons.location_on_outlined, tooltip: context.tr('Change ward (Ward {w})', {'w': widget.ward}), onPressed: () => pickWard(context, ref))],
         onRefresh: () => _load(reset: true),
         slivers: slivers,
       );
@@ -352,14 +354,15 @@ class FlagRow extends StatelessWidget {
     final type = f['type'] as String;
     return ListRow(
       title: '${f['road_name'] ?? f['road_id']}',
-      caption: '${f['work_order_id']} · ${'${f['contractor_name']}'.replaceAll(' (synthetic)', '')}${showWard ? ' · Ward ${f['ward_code']}' : ''}',
+      caption: '${f['work_order_id']} · ${'${f['contractor_name']}'.replaceAll(' (synthetic)', '')}'
+          '${showWard ? ' · ${context.tr('Ward {w}', {'w': f['ward_code']})}' : ''}',
       chip: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
-          StatusChip(flagShortLabels[type] ?? type, tone: flagTone(type), more: more),
+          StatusChip(context.tr(flagShortLabels[type] ?? type), tone: flagTone(type), more: more),
           const SizedBox(height: AppSpacing.s4),
-          Text(flagReason(f), style: t.caption.copyWith(color: c.textPrimary), maxLines: 3, overflow: TextOverflow.ellipsis),
+          Text(flagReason(context, f), style: t.caption.copyWith(color: c.textPrimary), maxLines: 3, overflow: TextOverflow.ellipsis),
         ],
       ),
       amount: formatInr(f['cost_inr'] as num? ?? 0),

@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../api/api_client.dart';
+import '../i18n.dart';
 import 'ui.dart';
 
 /// Asks the server's Claude [feature] for a draft and shows it editable on a
@@ -110,7 +111,7 @@ class _DraftPageState extends ConsumerState<_DraftPage> {
     await Clipboard.setData(ClipboardData(text: _text.text));
     if (!mounted) return;
     setState(() => _copied = true);
-    SemanticsService.sendAnnouncement(View.of(context), 'Copied to clipboard', TextDirection.ltr);
+    SemanticsService.sendAnnouncement(View.of(context), context.tr('Copied to clipboard'), TextDirection.ltr);
     _copiedTimer?.cancel();
     _copiedTimer = Timer(const Duration(seconds: 2), () {
       if (mounted) setState(() => _copied = false);
@@ -149,7 +150,7 @@ class _DraftPageState extends ConsumerState<_DraftPage> {
         ),
       );
     } else if (_error != null) {
-      panel = ErrorState(message: 'Could not draft this.\n$_error', onRetry: _draft);
+      panel = ErrorState(message: '${context.tr('Could not draft this.')}\n$_error', onRetry: _draft);
     } else if (_revealing) {
       final lines = _text.text.split('\n');
       panel = Column(
@@ -162,7 +163,7 @@ class _DraftPageState extends ConsumerState<_DraftPage> {
         maxLines: null,
         style: letter,
         decoration: InputDecoration(
-          hintText: widget.textLabel,
+          hintText: context.tr(widget.textLabel),
           filled: false,
           isCollapsed: true,
           contentPadding: EdgeInsets.zero,
@@ -179,7 +180,7 @@ class _DraftPageState extends ConsumerState<_DraftPage> {
         title: widget.title,
         controller: _scroll,
         actions: [
-          RoundIconButton(icon: Icons.refresh, tooltip: _error != null ? 'Retry' : 'Redraft', onPressed: _busy ? null : _draft),
+          RoundIconButton(icon: Icons.refresh, tooltip: context.tr(_error != null ? 'Retry' : 'Redraft'), onPressed: _busy ? null : _draft),
         ],
       ),
       bottomNavigationBar: BottomActionBar(
@@ -187,13 +188,13 @@ class _DraftPageState extends ConsumerState<_DraftPage> {
           children: [
             Expanded(
               child: SecondaryButton(
-                label: _copied ? 'Copied' : 'Copy',
+                label: context.tr(_copied ? 'Copied' : 'Copy'),
                 icon: _copied ? Icons.check : Icons.copy,
                 onPressed: hasText ? _copy : null,
               ),
             ),
             const SizedBox(width: AppSpacing.s12),
-            Expanded(child: PrimaryButton(label: 'Share', icon: Icons.ios_share, onPressed: hasText ? _share : null)),
+            Expanded(child: PrimaryButton(label: context.tr('Share'), icon: Icons.ios_share, onPressed: hasText ? _share : null)),
           ],
         ),
       ),
@@ -214,7 +215,7 @@ class _DraftPageState extends ConsumerState<_DraftPage> {
                       duration: AppMotion.of(context, AppMotion.quick),
                       child: hasText
                           ? StatusChip(
-                              _source == 'live' ? 'Live' : 'Saved',
+                              context.tr(_source == 'live' ? 'Live' : 'Saved'),
                               key: ValueKey(_source),
                               tone: _source == 'live' ? StatusTone.success : StatusTone.neutral,
                               dot: true,
@@ -224,7 +225,7 @@ class _DraftPageState extends ConsumerState<_DraftPage> {
                     const SizedBox(width: AppSpacing.s8),
                     Expanded(
                       child: Text(
-                        _busy ? 'Drafting…' : (_source == 'live' ? 'Drafted live by Claude' : (hasText ? 'Saved draft' : '')),
+                        context.tr(_busy ? 'Drafting…' : (_source == 'live' ? 'Drafted live by Claude' : (hasText ? 'Saved draft' : ''))),
                         style: t.caption,
                       ),
                     ),
@@ -246,7 +247,7 @@ class _DraftPageState extends ConsumerState<_DraftPage> {
                 ],
                 const SizedBox(height: AppSpacing.s16),
                 if (hasText) ...[
-                  Text(widget.textLabel, style: t.caption),
+                  Text(context.tr(widget.textLabel), style: t.caption),
                   const SizedBox(height: AppSpacing.s8),
                 ],
                 AnimatedSwitcher(
@@ -266,7 +267,7 @@ class _DraftPageState extends ConsumerState<_DraftPage> {
                 ),
                 const SizedBox(height: AppSpacing.s12),
                 Text(
-                  _busy ? 'Claude is writing from the audit rows on the server.' : 'Draft made from synthetic data. Review before sending.',
+                  context.tr(_busy ? 'Claude is writing from the audit rows on the server.' : 'Draft made from synthetic data. Review before sending.'),
                   style: t.caption,
                 ),
               ],

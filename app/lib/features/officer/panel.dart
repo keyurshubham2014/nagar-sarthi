@@ -112,24 +112,29 @@ class PanelMessage extends StatelessWidget {
   final bool isError;
 
   @override
-  Widget build(BuildContext context) => ListView(
-    primary: true,
-    padding: const EdgeInsets.only(bottom: AppSpacing.s32),
-    children: [
-      const DetailTitle(),
-      const SizedBox(height: AppSpacing.s16),
-      Center(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: AppSpacing.maxContent),
-          child: isError
-              ? ErrorState(message: text, onRetry: onRetry!)
-              : icon == null
-              ? Skeleton.rows(count: 6)
-              : EmptyState(message: text),
+  Widget build(BuildContext context) {
+    // The first line is a fixed sentence (translated); a second line is the error detail.
+    final nl = text.indexOf('\n');
+    final message = nl < 0 ? context.tr(text) : '${context.tr(text.substring(0, nl))}${text.substring(nl)}';
+    return ListView(
+      primary: true,
+      padding: const EdgeInsets.only(bottom: AppSpacing.s32),
+      children: [
+        const DetailTitle(),
+        const SizedBox(height: AppSpacing.s16),
+        Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: AppSpacing.maxContent),
+            child: isError
+                ? ErrorState(message: message, onRetry: onRetry!)
+                : icon == null
+                ? Skeleton.rows(count: 6)
+                : EmptyState(message: message),
+          ),
         ),
-      ),
-    ],
-  );
+      ],
+    );
+  }
 }
 
 /// Renders an [AsyncValue] as a page: loading, error with retry, or [data].
@@ -217,8 +222,12 @@ class EvidenceTable extends StatelessWidget {
           Padding(
             padding: const EdgeInsets.symmetric(vertical: AppSpacing.s4),
             child: () {
-              final label = Text(evidenceLabels[e.key] ?? '${e.key}'.replaceAll('_', ' '), style: t.bodySmall?.copyWith(color: c.textSecondary));
-              final value = formatEvidence('${e.key}', e.value);
+              final label = Text(
+                context.tr(evidenceLabels[e.key] ?? '${e.key}'.replaceAll('_', ' ')),
+                style: t.bodySmall?.copyWith(color: c.textSecondary),
+              );
+              // Fixed words (Yes, None, a repair method, a rate basis) translate; ids, dates and ₹ pass through.
+              final value = context.tr(formatEvidence('${e.key}', e.value));
               final style = t.bodySmall?.copyWith(color: c.textPrimary, fontWeight: FontWeight.w500);
               // A long value (a list of ids) goes under its label at full width, so ids never split.
               if (value.length > 24) {
