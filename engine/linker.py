@@ -418,7 +418,7 @@ def run(comps, wo, locs, roads, wards, posts):
             "Each complaint was placed on the map from its phone GPS, else from the area name it gave, else from the ward centre.",
             f"Complaints about the same kind of problem within {SAME_PLACE_M} m (or in the same area and road) and within {WINDOW_DAYS} days of each other became one issue; when unsure we kept them apart.",
             "Each issue was followed to BMC's work order, with contractor, cost and whether the repair lasted 30 days; a few links are our best match and are marked 'inferred'.",
-            "Social media posts about the same problem were attached to the issue; posts about problems BMC never received a complaint for became their own issues.",
+            "Social media posts about the same problem, place and days were attached to the issue; posts that matched no complaint became their own issues.",
         ],
     }
     ward_issues = {code: {"total": 0, **{o: 0 for o in OUTCOMES[:4]}, "social_only": 0} for code in ward_c}
