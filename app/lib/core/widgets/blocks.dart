@@ -615,3 +615,75 @@ class _StateBlock extends StatelessWidget {
     );
   }
 }
+
+/// Grey rounded info panel with a tappable header (icon, title, chevron)
+/// that expands to show [child] (standard motion). For notes such as "How
+/// this is kept fair" or "How we link".
+class CollapsiblePanel extends StatefulWidget {
+  const CollapsiblePanel({super.key, required this.title, required this.child, this.icon = Icons.info_outline, this.initiallyOpen = false});
+  final String title;
+  final Widget child;
+  final IconData icon;
+  final bool initiallyOpen;
+
+  @override
+  State<CollapsiblePanel> createState() => _CollapsiblePanelState();
+}
+
+class _CollapsiblePanelState extends State<CollapsiblePanel> {
+  late bool _open = widget.initiallyOpen;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = SaartheeColors.of(context);
+    final t = AppTypeScale.of(context);
+    final d = AppMotion.of(context, AppMotion.standard);
+    return ClipRRect(
+      borderRadius: AppRadii.tileRadius,
+      child: ColoredBox(
+        color: c.surfaceAlt,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Semantics(
+              expanded: _open,
+              child: Pressable(
+                onTap: () => setState(() => _open = !_open),
+                scale: false,
+                pressedColor: c.surfacePressed,
+                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.s16, vertical: AppSpacing.s12),
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(minHeight: AppSpacing.touchTarget - AppSpacing.s24),
+                  child: Row(
+                    children: [
+                      Icon(widget.icon, size: AppSpacing.iconSmall + 2, color: c.textPrimary),
+                      const SizedBox(width: AppSpacing.s12),
+                      Expanded(child: Text(widget.title, style: t.bodyStrong)),
+                      AnimatedRotation(
+                        turns: _open ? 0.5 : 0,
+                        duration: d,
+                        curve: AppMotion.standardCurve,
+                        child: Icon(Icons.expand_more, color: c.textSecondary),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+            AnimatedSize(
+              duration: d,
+              curve: AppMotion.standardCurve,
+              alignment: Alignment.topCenter,
+              child: _open
+                  ? Padding(
+                      padding: const EdgeInsets.fromLTRB(AppSpacing.s16, 0, AppSpacing.s16, AppSpacing.s16),
+                      child: DefaultTextStyle.merge(style: t.caption.copyWith(color: c.textPrimary, fontSize: 14, height: 20 / 14), child: widget.child),
+                    )
+                  : const SizedBox(width: double.infinity),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}

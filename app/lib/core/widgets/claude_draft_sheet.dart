@@ -4,14 +4,15 @@ import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:share_plus/share_plus.dart';
 
 import '../api/api_client.dart';
-import '../theme/tokens.dart';
-import 'saarthee.dart';
+import 'ui.dart';
 
 /// Asks the server's Claude [feature] for a draft and shows it editable on a
-/// full-screen page, with Copy and Redraft. The server builds the prompt from
-/// [body]; send ids, not figures. Reusable for any drafting feature (notice, brief...).
+/// full-screen draft page, with Copy, Share and regenerate. The server builds
+/// the prompt from [body]; send ids, not figures. Reusable for any drafting
+/// feature (notice, brief, question...).
 Future<void> showClaudeDraftSheet(
   BuildContext context, {
   required String title,
@@ -21,20 +22,15 @@ Future<void> showClaudeDraftSheet(
   String textLabel = 'Draft letter (editable)',
 }) => Navigator.of(context, rootNavigator: true).push<void>(
   MaterialPageRoute(
-    builder: (_) => Scaffold(
-      appBar: SaartheeAppBar(title: title),
-      body: SafeArea(
-        child: ContentWidth(
-          padded: false,
-          child: _DraftSheet(title: title, feature: feature, body: body, languages: languages, textLabel: textLabel),
-        ),
-      ),
-    ),
+    builder: (_) => _DraftPage(title: title, feature: feature, body: body, languages: languages, textLabel: textLabel),
   ),
 );
 
-class _DraftSheet extends ConsumerStatefulWidget {
-  const _DraftSheet({
+/// Short segment labels for the language switch; unknown codes keep their given label.
+const Map<String, String> _shortLang = {'en': 'EN', 'hi': 'हिं', 'mr': 'मरा'};
+
+class _DraftPage extends ConsumerStatefulWidget {
+  const _DraftPage({
     required this.title,
     required this.feature,
     required this.body,
@@ -49,16 +45,21 @@ class _DraftSheet extends ConsumerStatefulWidget {
   final Map<String, String>? languages;
   final String textLabel;
   @override
-  ConsumerState<_DraftSheet> createState() => _DraftSheetState();
+  ConsumerState<_DraftPage> createState() => _DraftPageState();
 }
 
-class _DraftSheetState extends ConsumerState<_DraftSheet> {
+class _DraftPageState extends ConsumerState<_DraftPage> {
   final _text = TextEditingController();
+  final _scroll = ScrollController();
   bool _busy = false;
   bool _copied = false;
+
+  /// True while a fresh draft's paragraphs fade in; then the editable field takes over.
+  bool _revealing = false;
   String? _source;
   String? _error;
   Timer? _copiedTimer;
+  Timer? _revealTimer;
   late String? _lang = widget.languages == null ? null : (widget.body['language'] as String? ?? widget.languages!.keys.first);
 
   @override
@@ -70,7 +71,9 @@ class _DraftSheetState extends ConsumerState<_DraftSheet> {
   @override
   void dispose() {
     _copiedTimer?.cancel();
+    _revealTimer?.cancel();
     _text.dispose();
+    _scroll.dispose();
     super.dispose();
   }
 
@@ -84,7 +87,17 @@ class _DraftSheetState extends ConsumerState<_DraftSheet> {
       final reply = await ref.read(apiClientProvider).claude(widget.feature, body);
       if (!mounted) return;
       _text.text = reply.text;
-      setState(() => _source = reply.source);
+      final reveal = !AppMotion.reduced(context);
+      setState(() {
+        _source = reply.source;
+        _revealing = reveal;
+      });
+      _revealTimer?.cancel();
+      if (reveal) {
+        _revealTimer = Timer(AppMotion.staggerStep * AppMotion.staggerMax + AppMotion.standard, () {
+          if (mounted) setState(() => _revealing = false);
+        });
+      }
     } on ApiException catch (e) {
       debugPrint('[draft] ${widget.feature} failed: ${e.status ?? ''} ${e.message}');
       if (mounted) setState(() => _error = e.message);
@@ -104,110 +117,163 @@ class _DraftSheetState extends ConsumerState<_DraftSheet> {
     });
   }
 
+  Future<void> _share() async {
+    try {
+      await SharePlus.instance.share(ShareParams(text: _text.text, subject: widget.title));
+    } catch (e) {
+      // Some browsers have no share sheet: copy instead so the action still does something.
+      debugPrint('[draft] share failed: $e');
+      await _copy();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final c = SaartheeColors.of(context);
-    final t = Theme.of(context).textTheme;
+    final t = AppTypeScale.of(context);
     final hasText = !_busy && _error == null && _source != null;
-    return Padding(
-      padding: EdgeInsets.fromLTRB(
-        AppSpacing.gutter,
-        AppSpacing.s12,
-        AppSpacing.gutter,
-        AppSpacing.s16,
-      ),
-      child: Column(
+    final letter = t.body.copyWith(height: 26 / 16);
+    final langs = widget.languages;
+
+    final Widget panel;
+    if (_busy) {
+      panel = Skeleton(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            for (final w in const [0.5, 1.0, 0.95, 1.0, 0.7, 0.0, 1.0, 0.9, 0.98, 0.6]) ...[
+              if (w == 0) const SizedBox(height: 12) else SkeletonBox(height: 12, widthFactor: w, radius: 6),
+              const SizedBox(height: AppSpacing.s14),
+            ],
+          ],
+        ),
+      );
+    } else if (_error != null) {
+      panel = ErrorState(message: 'Could not draft this.\n$_error', onRetry: _draft);
+    } else if (_revealing) {
+      final lines = _text.text.split('\n');
+      panel = Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          if (hasText)
-            Align(
-              alignment: Alignment.centerLeft,
-              child: _Badge(
-                _source == 'live' ? 'Drafted live by Claude' : 'Saved draft',
-                _source == 'live' ? c.successTint : c.warningTint,
-                _source == 'live' ? c.success : c.warning,
+        children: [for (final (i, l) in lines.indexed) StaggeredEntrance(index: i, child: Text(l, style: letter))],
+      );
+    } else {
+      panel = TextField(
+        controller: _text,
+        maxLines: null,
+        style: letter,
+        decoration: InputDecoration(
+          hintText: widget.textLabel,
+          filled: false,
+          isCollapsed: true,
+          contentPadding: EdgeInsets.zero,
+          border: InputBorder.none,
+          enabledBorder: InputBorder.none,
+          focusedBorder: InputBorder.none,
+        ),
+      );
+    }
+
+    return Scaffold(
+      backgroundColor: c.background,
+      appBar: TopBar(
+        title: widget.title,
+        controller: _scroll,
+        actions: [
+          RoundIconButton(icon: Icons.refresh, tooltip: _error != null ? 'Retry' : 'Redraft', onPressed: _busy ? null : _draft),
+        ],
+      ),
+      bottomNavigationBar: BottomActionBar(
+        child: Row(
+          children: [
+            Expanded(
+              child: SecondaryButton(
+                label: _copied ? 'Copied' : 'Copy',
+                icon: _copied ? Icons.check : Icons.copy,
+                onPressed: hasText ? _copy : null,
               ),
             ),
-          if (widget.languages case final langs?) ...[
-            const SizedBox(height: AppSpacing.s8),
-            SegmentedButton<String>(
-              segments: [for (final e in langs.entries) ButtonSegment(value: e.key, label: Text(e.value))],
-              selected: {_lang!},
-              showSelectedIcon: false,
-              onSelectionChanged: _busy
-                  ? null
-                  : (s) {
-                      setState(() => _lang = s.first);
-                      _draft();
-                    },
-            ),
+            const SizedBox(width: AppSpacing.s12),
+            Expanded(child: PrimaryButton(label: 'Share', icon: Icons.ios_share, onPressed: hasText ? _share : null)),
           ],
-          const SizedBox(height: AppSpacing.s8),
-          Expanded(
-            child: _busy
-                ? Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const LinearProgressIndicator(),
-                      const SizedBox(height: AppSpacing.s12),
-                      Text('Drafting…', style: t.bodyLarge),
-                      Text('Claude is writing from the audit rows on the server.', style: t.bodySmall),
-                    ],
-                  )
-                : _error != null
-                ? Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.error_outline, color: c.error, size: 36),
-                      const SizedBox(height: AppSpacing.s8),
-                      Text('Could not draft this.\n$_error', textAlign: TextAlign.center),
-                    ],
-                  )
-                : TextField(
-                    controller: _text,
-                    expands: true,
-                    maxLines: null,
-                    textAlignVertical: TextAlignVertical.top,
-                    style: t.bodyMedium,
-                    decoration: InputDecoration(
-                      labelText: widget.textLabel,
-                      alignLabelWithHint: true,
-                      border: const OutlineInputBorder(),
+        ),
+      ),
+      body: SafeArea(
+        top: false,
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: AppSpacing.maxContent),
+            child: ListView(
+              controller: _scroll,
+              padding: const EdgeInsets.fromLTRB(AppSpacing.gutter, AppSpacing.s8, AppSpacing.gutter, AppSpacing.s32),
+              children: [
+                Semantics(header: true, child: Text(widget.title, style: t.headline)),
+                const SizedBox(height: AppSpacing.s12),
+                Row(
+                  children: [
+                    AnimatedSwitcher(
+                      duration: AppMotion.of(context, AppMotion.quick),
+                      child: hasText
+                          ? StatusChip(
+                              _source == 'live' ? 'Live' : 'Saved',
+                              key: ValueKey(_source),
+                              tone: _source == 'live' ? StatusTone.success : StatusTone.neutral,
+                              dot: true,
+                            )
+                          : const SizedBox(height: AppSpacing.s24),
+                    ),
+                    const SizedBox(width: AppSpacing.s8),
+                    Expanded(
+                      child: Text(
+                        _busy ? 'Drafting…' : (_source == 'live' ? 'Drafted live by Claude' : (hasText ? 'Saved draft' : '')),
+                        style: t.caption,
+                      ),
+                    ),
+                  ],
+                ),
+                if (langs != null) ...[
+                  const SizedBox(height: AppSpacing.s16),
+                  IgnorePointer(
+                    ignoring: _busy,
+                    child: SegmentedControl<String>(
+                      segments: [for (final e in langs.entries) (e.key, _shortLang[e.key] ?? e.value)],
+                      value: _lang!,
+                      onChanged: (v) {
+                        setState(() => _lang = v);
+                        _draft();
+                      },
                     ),
                   ),
+                ],
+                const SizedBox(height: AppSpacing.s16),
+                if (hasText) ...[
+                  Text(widget.textLabel, style: t.caption),
+                  const SizedBox(height: AppSpacing.s8),
+                ],
+                AnimatedSwitcher(
+                  duration: AppMotion.of(context, AppMotion.standard),
+                  child: KeyedSubtree(
+                    key: ValueKey('$_busy$_error'),
+                    // Skeleton lines are grey themselves, so they sit on the page, not the grey panel.
+                    child: _error != null || _busy
+                        ? Padding(padding: const EdgeInsets.symmetric(vertical: AppSpacing.s8), child: panel)
+                        : Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.all(AppSpacing.s20),
+                            decoration: BoxDecoration(color: c.surfaceAlt, borderRadius: AppRadii.tileRadius),
+                            child: panel,
+                          ),
+                  ),
+                ),
+                const SizedBox(height: AppSpacing.s12),
+                Text(
+                  _busy ? 'Claude is writing from the audit rows on the server.' : 'Draft made from synthetic data. Review before sending.',
+                  style: t.caption,
+                ),
+              ],
+            ),
           ),
-          const SizedBox(height: AppSpacing.s12),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.end,
-            children: [
-              OutlinedButton.icon(
-                onPressed: _busy ? null : _draft,
-                icon: const Icon(Icons.refresh),
-                label: Text(_error != null ? 'Retry' : 'Redraft'),
-              ),
-              const SizedBox(width: AppSpacing.s8),
-              FilledButton.icon(
-                onPressed: hasText ? _copy : null,
-                icon: Icon(_copied ? Icons.check : Icons.copy),
-                label: Text(_copied ? 'Copied to clipboard' : 'Copy'),
-              ),
-            ],
-          ),
-        ],
+        ),
       ),
     );
   }
-}
-
-class _Badge extends StatelessWidget {
-  const _Badge(this.label, this.bg, this.fg);
-  final String label;
-  final Color bg;
-  final Color fg;
-  @override
-  Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.symmetric(horizontal: AppSpacing.s8, vertical: 2),
-    decoration: BoxDecoration(color: bg, borderRadius: AppRadii.controlRadius),
-    child: Text(label, style: Theme.of(context).textTheme.labelMedium?.copyWith(color: fg)),
-  );
 }
