@@ -129,3 +129,38 @@ Organised by **Sumeet Doshi**, Claude Community Ambassador, Anthropic
 ## License
 
 Data and docs released under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).
+
+## Running Nagar Sarthi
+
+Everything runs on the laptop; nothing is deployed. Needs Python 3, Docker Desktop, Node 20.12+ and Flutter.
+
+1. **Engine** (writes `engine/out/audit.json`; re-run after data changes, then restart the server):
+   ```bash
+   python3 engine/audit.py
+   ```
+2. **Postgres** (container `nagar-sarthi-db`, host port **5435**, tables created by `infra/init.sql` on first start):
+   ```bash
+   docker compose -f infra/docker-compose.yml up -d --wait
+   docker exec nagar-sarthi-db psql -U nagar -d nagar_sarthi -c '\dt'
+   ```
+3. **Server** (http://localhost:8787; read endpoints work even if Postgres is down):
+   ```bash
+   cd server
+   cp .env.example .env          # then put your ANTHROPIC_API_KEY in .env (never commit it)
+   npm install
+   npm start
+   curl localhost:8787/api/health
+   ```
+   Without a key, `POST /api/claude/:feature` answers from `server/fallbacks/<feature>.json` with `"source":"fallback"`.
+4. **App in Chrome**:
+   ```bash
+   cd app
+   flutter run -d chrome
+   ```
+5. **App on the Android emulator** (the emulator reaches the laptop at `10.0.2.2`):
+   ```bash
+   flutter emulators --launch <emulator_id>
+   cd app
+   flutter run -d emulator-5554
+   ```
+   Point the app at another server with `--dart-define=API_BASE=http://<host>:8787`.
