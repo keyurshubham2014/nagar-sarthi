@@ -26,9 +26,14 @@ final roadFlagsProvider = FutureProvider.family<List<dynamic>, String>(
 /// Money flags only (no timing-only sla_missed), biggest first: Home's "Needs your attention".
 final topFlagsProvider = FutureProvider.family<List<dynamic>, String>(
   retry: _noRetry,
-  (ref, ward) async =>
-      (await ref.watch(apiClientProvider).flags(ward: ward, type: 'dlp_paid,fix_failed,over_rate,double_billing', limit: 5))['items']
-          as List,
+  (ref, ward) async {
+    final items =
+        (await ref.watch(apiClientProvider).flags(ward: ward, type: 'dlp_paid,fix_failed,over_rate,double_billing', limit: 20))['items']
+            as List;
+    // A work order can carry several flags: show it once, under its first (largest) row.
+    final seen = <dynamic>{};
+    return items.where((f) => seen.add(f['work_order_id'])).take(5).toList();
+  },
 );
 
 final nextRupeeProvider = FutureProvider.family<Json, String>(
