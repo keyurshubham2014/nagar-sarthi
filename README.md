@@ -6,6 +6,7 @@ Nagar Sarthi ("the city's guide") follows Mumbai's monsoon road-repair money fro
 
 ## Contents
 
+- [Screenshots](#screenshots)
 - [About](#about)
 - [Architecture](#architecture)
 - [Getting started](#getting-started)
@@ -17,6 +18,27 @@ Nagar Sarthi ("the city's guide") follows Mumbai's monsoon road-repair money fro
 - [Troubleshooting](#troubleshooting)
 - [The dataset](#the-dataset)
 - [License](#license)
+
+---
+
+## Screenshots
+
+The web build at phone width (390 × 844), Ward E.
+
+<table>
+  <tr>
+    <td align="center"><img src="docs/screenshots/home-officer.png" width="190" alt="Ward officer Home: ₹41.8 L to review in Ward E, warranty claims, failed repairs and next-rupee tiles"><br><sub>Officer Home</sub></td>
+    <td align="center"><img src="docs/screenshots/map-ward-e.png" width="190" alt="Map with Ward E selected: real ward outline, repaired roads and a card with ₹41.8 L to review"><br><sub>Map: Ward E selected</sub></td>
+    <td align="center"><img src="docs/screenshots/audit.png" width="190" alt="Audit list: 132 flags, ₹41.8 L to review, biggest amounts first with the evidence line for each"><br><sub>Audit list</sub></td>
+    <td align="center"><img src="docs/screenshots/next-rupee.png" width="190" alt="Next rupee: a ₹5 L what-if funds 11 of 13 items, including 4 near a hospital and 3 near a school"><br><sub>Next rupee: +₹5 L what-if</sub></td>
+  </tr>
+  <tr>
+    <td align="center"><img src="docs/screenshots/scorecard.png" width="190" alt="Contractor scorecard: speed and durability against the typical value for the same kind of work"><br><sub>Contractor scorecard</sub></td>
+    <td align="center"><img src="docs/screenshots/ward-brief.png" width="190" alt="Ward brief for the corporator, drafted live by Claude, with English, Hindi and Marathi tabs"><br><sub>Ward brief (live Claude draft)</sub></td>
+    <td align="center"><img src="docs/screenshots/report-marathi.png" width="190" alt="Citizen report in Marathi understood as a pothole in Parel, Ward F/S"><br><sub>Citizen report in Marathi</sub></td>
+    <td></td>
+  </tr>
+</table>
 
 ---
 
@@ -281,7 +303,7 @@ Defined in [`infra/init.sql`](infra/init.sql), which runs once on the container'
 │   ├── android/  web/     # Platform targets
 │   └── tool/              # Launcher icon generator (macOS)
 ├── infra/                 # docker-compose.yml and init.sql for Postgres
-├── docs/                  # Stage demo script, PRD, design brief, task plans
+├── docs/                  # Stage demo script, screenshots, PRD, design brief, task plans
 ├── DATA_DICTIONARY.md     # Every dataset column explained
 └── STARTER_IDEAS.md       # Organisers' build ideas and judging rubric
 ```
