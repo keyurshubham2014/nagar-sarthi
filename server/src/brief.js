@@ -7,7 +7,7 @@ const LANGS = { en: 'English', hi: 'Hindi (Devanagari script)', mr: 'Marathi (De
 // fix_failed has its own line; sla_missed is timing, not rupees.
 const TYPES = ['dlp_paid', 'over_rate', 'double_billing'];
 
-const L = {
+export const L = {
   en: {
     lakh: 'lakh',
     crore: 'crore',
@@ -97,7 +97,7 @@ const L = {
 };
 
 /** Rupees in lakh / crore: ₹47,630 · ₹12.1 lakh · ₹1.34 crore. */
-function money(n, t) {
+export function money(n, t) {
   const a = Math.abs(n);
   if (a >= 1e7) return `₹${+(a / 1e7).toFixed(2)} ${t.crore}`;
   if (a >= 1e5) return `₹${+(a / 1e5).toFixed(1)} ${t.lakh}`;
@@ -113,7 +113,7 @@ function reason(r, t) {
 }
 
 /** Ward figures, worded in [lang]. Same numbers for every language. */
-function figures(code, audit, lang) {
+export function figures(code, audit, lang) {
   const t = L[lang];
   const w = audit.wards[code];
   const jobs = (w.by_method ?? []).reduce((s, m) => s + m.jobs, 0);

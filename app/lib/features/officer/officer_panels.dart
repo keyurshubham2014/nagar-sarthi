@@ -5,6 +5,7 @@ import '../../core/flag_strings.dart';
 import '../../core/format.dart';
 import '../../core/theme/tokens.dart';
 import '../../core/widgets/claude_draft_sheet.dart';
+import '../citizen/report_card.dart';
 import '../corporator/corporator_panels.dart';
 import '../map/map_data.dart';
 import '../map/map_layers.dart';
@@ -158,6 +159,11 @@ class WardPanel extends ConsumerWidget {
                   .push(PanelPage('$kContractorsInWard · Ward $code', ScorecardList(ward: code))),
               icon: const Icon(Icons.fact_check_outlined),
               label: const Text(kContractorsInWard),
+            ),
+            OutlinedButton.icon(
+              onPressed: () => ref.read(panelProvider.notifier).push(PanelPage(kReportCard, ReportCardPage(ward: code))),
+              icon: const Icon(Icons.ios_share),
+              label: const Text(kReportCard),
             ),
           ],
         ),

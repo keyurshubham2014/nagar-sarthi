@@ -16,9 +16,12 @@ String get apiBase {
 
 /// Thrown for any failed API call; [message] is safe to show.
 class ApiException implements Exception {
-  ApiException(this.message, {this.status});
+  ApiException(this.message, {this.status, this.fields = const {}});
   final String message;
   final int? status;
+
+  /// Field-level validation messages from a 400 (`{error:{fields:{name: message}}}`).
+  final Map<String, dynamic> fields;
   @override
   String toString() => message;
 }
@@ -58,9 +61,11 @@ class ApiClient {
       final serverMsg = data is Map && data['error'] is Map
           ? data['error']['message'] as String?
           : null;
+      final fields = data is Map && data['error'] is Map ? data['error']['fields'] : null;
       throw ApiException(
         serverMsg ?? 'Could not reach the Nagar Sarthi server at $apiBase',
         status: e.response?.statusCode,
+        fields: fields is Map<String, dynamic> ? fields : const {},
       );
     }
   }
@@ -108,6 +113,29 @@ class ApiClient {
       queryParameters: {'ward': ?ward, 'road': ?road, 'type': ?type},
     ),
   );
+
+  /// Citizen intake: {source, category, language, locality, ward_code, ward_name, match_count, matches[]}.
+  Future<Map<String, dynamic>> intake(String text) =>
+      _call(() => _dio.post('/api/claude/intake', data: {'text': text}));
+
+  /// Matches for a corrected category and locality: {match_count, matches[]}.
+  Future<Map<String, dynamic>> complaintMatches(String category, String locality) => _call(
+    () => _dio.get('/api/complaints/matches', queryParameters: {'category': category, 'locality': locality}),
+  );
+
+  /// Gazetteer rows: {locality, ward_code, aliases[]}.
+  Future<List<dynamic>> localities() => _get('/api/localities');
+
+  /// Files a complaint; 400 carries [ApiException.fields], 503 when the database is down.
+  Future<Map<String, dynamic>> fileComplaint(Map<String, dynamic> body) =>
+      _call(() => _dio.post('/api/complaints', data: body));
+
+  /// Full trail for a dataset (BMC25-000123) or app (NS-000001) id.
+  Future<Map<String, dynamic>> complaint(String id) => _get('/api/complaints/${Uri.encodeComponent(id)}');
+
+  /// Complaints at one locality, newest first: {locality, ward_code, total, rows[]}.
+  Future<Map<String, dynamic>> complaintsAt(String locality) =>
+      _call(() => _dio.get('/api/complaints', queryParameters: {'locality': locality}));
 
   /// Calls a registered server feature (`ping`, later `notice`, `brief`...).
   /// Pass `key` in [body] to pick a saved fallback entry.

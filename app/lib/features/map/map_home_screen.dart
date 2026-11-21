@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/map/civic_map.dart';
 import '../../core/flag_strings.dart';
 import '../../core/theme/tokens.dart';
+import '../citizen/citizen_panels.dart';
 import '../corporator/corporator_panels.dart';
 import '../officer/officer_data.dart';
 import '../officer/officer_panels.dart';
@@ -170,15 +171,26 @@ class _MapHomeScreenState extends ConsumerState<MapHomeScreen> {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                if (data != null && legendLayers.any((l) => l.legend.isNotEmpty))
-                  Align(
-                    alignment: Alignment.bottomRight,
-                    child: _Legend(
-                      layers: legendLayers,
-                      open: legendOpen,
-                      onToggle: () => setState(() => _legendOpen = !legendOpen),
+                // Citizen entry on the left, legend on the right; the legend wraps below if both don't fit.
+                Wrap(
+                  alignment: WrapAlignment.spaceBetween,
+                  crossAxisAlignment: WrapCrossAlignment.end,
+                  runSpacing: AppSpacing.s8,
+                  children: [
+                    FloatingActionButton.extended(
+                      heroTag: 'citizen',
+                      onPressed: () => openCitizenHub(context),
+                      icon: const Icon(Icons.campaign_outlined),
+                      label: const Text(kCitizenAction),
                     ),
-                  ),
+                    if (data != null && legendLayers.any((l) => l.legend.isNotEmpty))
+                      _Legend(
+                        layers: legendLayers,
+                        open: legendOpen,
+                        onToggle: () => setState(() => _legendOpen = !legendOpen),
+                      ),
+                  ],
+                ),
                 if (data != null) ...[
                   const SizedBox(height: AppSpacing.s8),
                   Align(

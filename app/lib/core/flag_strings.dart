@@ -147,3 +147,48 @@ const String kMonsoonRainTint = 'Blue wash: Orange or Red rain alert';
 const String kHeatOpen = 'open';
 const String kRepairReopened = 'repair re-opened';
 const String kHeatRepeat = 'Open or repeat complaints (repair re-opened)';
+
+// Citizen side (TASK-06). Neutral: what happened to a complaint, not who is to blame.
+const String kCitizenAction = 'Report or track a problem';
+const String kCitizenHubTitle = 'For citizens';
+const String kReportProblem = 'Report a problem';
+const String kTrackComplaint = 'Track a complaint';
+const String kReportCard = "My ward's report card";
+const String kAskWard = 'Ask my ward';
+const String kIntakeHint = 'Describe the problem in your own words — English, हिंदी, मराठी';
+const String kUnderstand = 'Understand';
+const String kUnderstoodLive = 'Understood by Claude';
+const String kUnderstoodRules = 'Understood on device rules (keyword match, no AI)';
+const String kAddMyVoice = 'Add my voice';
+const String kFileAsNew = 'File as new';
+const String kNotYetFixed = 'Not yet fixed — no work order linked';
+const String kFixFailed30 = 'Repair failed within 30 days';
+const String kFixHeld = 'Held: not re-opened within 30 days';
+String alreadyReported(int n) => n == 1 ? 'Already reported: 1 neighbour raised this' : 'Already reported: $n neighbours raised this';
+
+/// Intake examples, phrased like real complaints in the data, at places with recent complaints.
+const List<(String, String)> intakeExamples = [
+  ('मराठी', 'रेल्वे स्टेशन जवळ रस्त्यावर मोठा खड्डा आहे, परळ. लवकर दुरुस्त करा.'),
+  ('Hinglish', 'Bhai Kurla West station road pe bahut bada khadda hai, roz koi na koi girta hai. Please jaldi theek karo'),
+  ('English', 'Open manhole near bus stop, Poisar. Covered with water, not visible. Very dangerous!'),
+];
+
+const List<String> complaintCategories = [
+  'Pothole',
+  'Waterlogging',
+  'Open or broken manhole',
+  'Choked drain / nullah overflow',
+  'Road cave-in',
+  'Broken paver blocks',
+  'Road related',
+  'Other',
+];
+const Map<String, String> complaintLanguages = {'en': 'English', 'hi': 'हिंदी', 'mr': 'मराठी', 'hi-en': 'Hinglish'};
+
+/// Ask-the-ward topics: server topic id -> button label.
+const Map<String, String> questionTopics = {
+  'failed_repairs': 'Repairs that failed within 30 days',
+  'warranty': 'Money billed under warranty',
+  'open_issues': 'Complaints never fixed',
+  'budget': 'Budget and spending',
+};

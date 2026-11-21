@@ -5,6 +5,8 @@ import { config, anthropicKey } from './config.js';
 import { notFound, badRequest } from './errors.js';
 import { notice } from './notice.js';
 import { brief } from './brief.js';
+import { intake } from './citizen.js';
+import { question } from './question.js';
 
 /**
  * Claude feature registry. Later tasks add entries (notice, brief, intake, question):
@@ -31,6 +33,8 @@ export const features = {
   },
   notice,
   brief,
+  intake,
+  question,
 };
 
 // Fallback text may hold {{name}} tokens, filled from prepare()'s `vars`.

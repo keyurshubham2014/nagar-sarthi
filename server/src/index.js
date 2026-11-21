@@ -6,8 +6,9 @@ import { audit } from './audit.js';
 import { dbStatus } from './db.js';
 import { relay } from './claude.js';
 import { scorecards, contractorWorkOrders } from './scorecards.js';
-import { errorHandler, notFound } from './errors.js';
+import { errorHandler, notFound, badRequest } from './errors.js';
 import { compactTimeline, complaintsHeat } from './timeline.js';
+import { localities, understand, findMatches, localityByName, createComplaint, complaintDetail, complaintsAt } from './citizen.js';
 
 const app = express();
 app.use(cors());
@@ -120,6 +121,35 @@ app.get('/api/complaints/heat', (req, res) => {
   const ward = typeof req.query.ward === 'string' && req.query.ward ? req.query.ward : undefined;
   if (ward) lookup(audit.wards, ward, `Ward '${ward}'`);
   res.json(complaintsHeat(audit, ward));
+});
+
+// Citizen side (TASK-06). Gazetteer for the locality picker.
+app.get('/api/localities', (_req, res) => {
+  res.json(localities.map(({ locality, ward_code, aliases }) => ({ locality, ward_code, aliases })));
+});
+
+// File a complaint (validated; 400 with fields, 503 when Postgres is down).
+app.post('/api/complaints', async (req, res) => {
+  const b = req.body && typeof req.body === 'object' && !Array.isArray(req.body) ? req.body : {};
+  res.status(201).json(await createComplaint(audit, b));
+});
+
+// Track: ?locality= lists, /:id gives the full trail. After /heat so that route still matches.
+app.get('/api/complaints', async (req, res) => res.json(await complaintsAt(audit, req.query.locality)));
+// Re-run matching after the citizen corrects category or locality on the intake card.
+app.get('/api/complaints/matches', async (req, res) => {
+  const loc = localityByName(req.query.locality);
+  if (!loc) throw notFound(`Locality '${req.query.locality}'`);
+  if (typeof req.query.category !== 'string') throw badRequest('Send ?category=');
+  res.json(await findMatches(audit, req.query.category, loc.locality));
+});
+app.get('/api/complaints/:id', async (req, res) => res.json(await complaintDetail(audit, req.params.id)));
+
+// Intake: Claude (or the device rules) gives category, place text and language; the server
+// resolves the locality from the gazetteer and finds matching complaints.
+app.post('/api/claude/intake', async (req, res) => {
+  const reply = await relay('intake', req.body ?? {}, audit);
+  res.json(await understand(audit, req.body, reply));
 });
 
 app.post('/api/claude/:feature', async (req, res) => {
