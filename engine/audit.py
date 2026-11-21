@@ -148,7 +148,7 @@ def build():
     z = {cid: {} for cid in raw}
     for k in ("speed", "durability", "pricing"):
         mu, sd = mean([r[k] for r in raw.values()]), st.pstdev([r[k] for r in raw.values()])
-        for cid, r in raw.items(): z[cid][k] = r2((r[k] - mu) / sd) if sd else 0
+        for cid, r in raw.items(): z[cid][k] = r2((r[k] - mu) / sd) + 0.0 if sd else 0  # +0.0 avoids -0.0
     NAMES = {"speed": "Speed (SLA)", "durability": "Durability (repairs that last)", "pricing": "Pricing against the rate card"}
     for cid, js in byc.items():
         m = metrics(js)
