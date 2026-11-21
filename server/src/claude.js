@@ -78,15 +78,19 @@ export async function relay(name, body, audit) {
       const msg = await c.messages.create(
         {
           model: config.claudeModel,
-          max_tokens: maxTokens,
-          ...(system ? { system } : {}),
+          // Thinking tokens count toward max_tokens: keep effort low and leave headroom for them.
+          max_tokens: maxTokens + 3000,
+          output_config: { effort: 'low' },
+          // The app shows drafts as plain text, so Markdown marks would appear literally.
+          system: `${system ? `${system} ` : ''}Write plain text only: no Markdown, no asterisks, no # headings.`,
           messages: [{ role: 'user', content: prompt }],
         },
         { timeout: config.claudeTimeoutMs },
       );
       const text = msg.content.filter((b) => b.type === 'text').map((b) => b.text).join('');
       if (msg.stop_reason === 'max_tokens') {
-        console.warn(`[claude] ${name} hit max_tokens, using fallback`);
+        const kinds = msg.content.map((b) => b.type).join(',');
+        console.warn(`[claude] ${name} hit max_tokens (${msg.usage?.output_tokens} out, blocks: ${kinds}, ${text.length} chars), using fallback`);
       } else if (text && feature.validate && !feature.validate(text, ctx)) {
         console.warn(`[claude] ${name} draft failed validation, using fallback`);
       } else if (text) {
