@@ -1,0 +1,21 @@
+services:
+  db:
+    image: postgres:17-alpine
+    container_name: nagar-sarthi-db
+    environment:
+      POSTGRES_USER: nagar
+      POSTGRES_PASSWORD: nagar
+      POSTGRES_DB: nagar_sarthi
+    ports:
+      - "127.0.0.1:5435:5432"
+    volumes:
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+      - nagar_pg:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U nagar -d nagar_sarthi"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+volumes:
+  nagar_pg:
