@@ -1,31 +1,25 @@
 import 'dart:async';
-import '../../core/i18n.dart';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:latlong2/latlong.dart';
 
 import '../../core/api/api_client.dart';
 import '../../core/flag_strings.dart';
-import '../../core/theme/tokens.dart';
+import '../../core/i18n.dart';
+import '../../core/map/civic_map.dart';
+import '../../core/widgets/ui.dart';
 import 'map_data.dart';
 import 'map_layers.dart';
 
-// Monsoon mode colours.
-const Color kMonsoonGrey = Color(0xFFA0A0A0);
-const Color kMonsoonGlow = Color(0xFFFFB300);
-const Color kMonsoonRed = Color(0xFFD32F2F);
-const Color kMonsoonDot = Color(0xFF1E88E5);
-const Color kRainWash = Color(0xFF64B5F6);
-const Duration kMonsoonStep = Duration(milliseconds: 80); // 153 days ≈ 12 s
-
-const Map<String, Color> alertColors = {
-  'Green': Color(0xFF2E7D32),
-  'Yellow': Color(0xFFF9A825),
-  'Orange': Color(0xFFEF6C00),
-  'Red': Color(0xFFC62828),
-};
+// Monsoon mode colours (map tokens).
+const Color kMonsoonGrey = MapColors.monsoonIdle;
+const Color kMonsoonGlow = MapColors.monsoonRecent;
+const Color kMonsoonRed = MapColors.monsoonFailed;
+const Color kMonsoonDot = MapColors.complaintDot;
+const Color kRainWash = MapColors.rainWash;
+const Duration kMonsoonStep = Duration(milliseconds: 80); // 153 days ≈ 12 s at 1×
+const List<int> kMonsoonSpeeds = [1, 2, 4];
 
 const _months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 String _date(String iso) {
@@ -90,11 +84,27 @@ class Season {
       // Repaired again after a failed fix: pulse for the repair day and two after.
       final pulsing = isRed && rd.any((d) => d <= i && d > i - 3 && d > failedFrom[r.id]!);
       if (pulsing) {
-        pulse.add(Polyline(points: r.points, color: kMonsoonGlow, strokeWidth: 9, borderColor: kMonsoonRed, borderStrokeWidth: 2));
+        pulse.add(
+          Polyline(
+            points: r.points,
+            color: kMonsoonGlow,
+            strokeWidth: 9,
+            borderColor: kMonsoonRed,
+            borderStrokeWidth: 2,
+          ),
+        );
       } else if (isRed) {
         red.add(Polyline(points: r.points, color: kMonsoonRed, strokeWidth: 4.5));
       } else if (recent) {
-        glow.add(Polyline(points: r.points, color: kMonsoonGlow, strokeWidth: 6, borderColor: Colors.white, borderStrokeWidth: 1));
+        glow.add(
+          Polyline(
+            points: r.points,
+            color: kMonsoonGlow,
+            strokeWidth: 6,
+            borderColor: MapColors.roadCasing,
+            borderStrokeWidth: 1,
+          ),
+        );
       } else {
         grey.add(Polyline(points: r.points, color: kMonsoonGrey, strokeWidth: 2.5));
       }
@@ -110,13 +120,20 @@ class Season {
         for (final p in days[i - a]['c'] as List)
           CircleMarker(
             point: LatLng((p[0] as num).toDouble(), (p[1] as num).toDouble()),
-            radius: 3.5,
+            // Pops in: small on its first day, overshoots, then settles while it fades.
+            radius: const [2.5, 4.5, 3.5, 3.5, 3.5][a],
             color: kMonsoonDot.withValues(alpha: 0.85 * (1 - a / 5)),
           ),
     // "Paid again" marker at the road's midpoint, kept once it appears.
     for (final e in firstPaidAgain.entries)
       if (e.value <= i && _mid[e.key] != null)
-        CircleMarker(point: _mid[e.key]!, radius: 2.5, color: Colors.white, borderColor: const Color(0xFF7F0000), borderStrokeWidth: 1.2),
+        CircleMarker(
+          point: _mid[e.key]!,
+          radius: 2.5,
+          color: MapColors.label,
+          borderColor: kMonsoonRed,
+          borderStrokeWidth: 1.2,
+        ),
   ];
 }
 
@@ -133,6 +150,9 @@ typedef MonsoonState = ({int day, bool playing});
 class MonsoonController extends Notifier<MonsoonState?> {
   Timer? _timer;
 
+  /// Playback speed, one of [kMonsoonSpeeds].
+  int speed = 1;
+
   @override
   MonsoonState? build() {
     ref.onDispose(() => _timer?.cancel());
@@ -143,11 +163,17 @@ class MonsoonController extends Notifier<MonsoonState?> {
     _timer?.cancel();
     final s = state;
     state = (day: s == null || s.day >= last ? 0 : s.day, playing: true);
-    _timer = Timer.periodic(kMonsoonStep, (_) {
+    _timer = Timer.periodic(kMonsoonStep ~/ speed, (_) {
       final next = state!.day + 1;
       if (next >= last) _timer?.cancel();
       state = (day: next.clamp(0, last), playing: next < last);
     });
+  }
+
+  /// Next speed; a playing replay keeps going at the new pace.
+  void cycleSpeed(int last) {
+    speed = kMonsoonSpeeds[(kMonsoonSpeeds.indexOf(speed) + 1) % kMonsoonSpeeds.length];
+    if (state?.playing == true) play(last);
   }
 
   void pause() {
@@ -197,7 +223,7 @@ class MonsoonRainWash extends ConsumerWidget {
     return IgnorePointer(
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 250),
-        color: kRainWash.withValues(alpha: heavy ? (season.alert(day) == 'Red' ? 0.38 : 0.26) : 0),
+        color: kRainWash.withValues(alpha: heavy ? (season.alert(day) == 'Red' ? 0.22 : 0.14) : 0),
       ),
     );
   }
@@ -227,105 +253,263 @@ class MonsoonDotLayer extends ConsumerWidget {
   }
 }
 
-/// Bottom bar: play/pause/replay, slider, date, rain and running counters.
+/// Bottom panel: date, rain, play/pause, scrubber with weekly ticks, speed, running counts, Exit.
 class MonsoonBar extends ConsumerWidget {
   const MonsoonBar({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final t = Theme.of(context).textTheme;
+    final c = SaartheeColors.of(context);
+    final t = context.type;
     final async = ref.watch(seasonProvider);
     final s = ref.watch(monsoonProvider);
     final ctl = ref.read(monsoonProvider.notifier);
     final season = async.value;
 
+    Widget panel(Widget child) => Container(
+      padding: const EdgeInsets.fromLTRB(AppSpacing.s20, AppSpacing.s16, AppSpacing.s12, AppSpacing.s16),
+      decoration: BoxDecoration(
+        color: c.surface,
+        borderRadius: BorderRadius.circular(AppRadii.mapCard),
+        boxShadow: AppElevation.floating(c),
+      ),
+      child: child,
+    );
+
     if (season == null) {
-      return Card(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.s12, vertical: AppSpacing.s8),
-          child: async.hasError
-              ? Row(
-                  children: [
-                    const Expanded(child: Text('Could not load the monsoon timeline')),
-                    TextButton(onPressed: () => ref.invalidate(seasonProvider), child: const Text('Retry')),
-                  ],
-                )
-              : const Row(
-                  children: [
-                    SizedBox.square(dimension: 16, child: CircularProgressIndicator(strokeWidth: 2)),
-                    SizedBox(width: AppSpacing.s8),
-                    Text('Loading the monsoon timeline…'),
-                  ],
+      return panel(
+        async.hasError
+            ? Row(
+                children: [
+                  Expanded(child: Text(context.tr('Could not load the monsoon timeline'), style: t.body)),
+                  TextButton(onPressed: () => ref.invalidate(seasonProvider), child: Text(context.tr('Retry'))),
+                  TextButton(onPressed: ctl.exit, child: Text(context.tr(kMonsoonExit))),
+                ],
+              )
+            : Semantics(
+                label: 'Loading the monsoon timeline',
+                child: const Skeleton(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      SkeletonBox(width: 160, height: 28),
+                      SizedBox(height: AppSpacing.s16),
+                      Row(
+                        children: [
+                          SkeletonBox(width: 56, height: 56, circle: true),
+                          SizedBox(width: AppSpacing.s12),
+                          Expanded(child: SkeletonBox(height: 8)),
+                        ],
+                      ),
+                      SizedBox(height: AppSpacing.s16),
+                      SkeletonBox(width: 200, height: 24),
+                    ],
+                  ),
                 ),
-        ),
+              ),
       );
     }
 
     final day = s?.day ?? 0;
     final rain = season.days[day]['rain'] as num?;
     final alert = season.alert(day);
-    final atEnd = s != null && !s.playing && day >= season.last;
-    final rainText = rain == null ? kMonsoonNoRain : '${rain.toStringAsFixed(rain < 10 ? 1 : 0)} mm rain';
+    final playing = s?.playing == true;
+    final atEnd = s != null && !playing && day >= season.last;
+    final rainText = rain == null ? kMonsoonNoRain : 'Rain ${rain.toStringAsFixed(rain < 10 ? 1 : 0)} mm';
+    final playLabel = playing ? 'Pause' : (atEnd ? 'Replay the season' : kMonsoonPlay);
 
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(AppSpacing.s4, AppSpacing.s4, AppSpacing.s12, AppSpacing.s8),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                IconButton.filled(
-                  tooltip: s?.playing == true ? 'Pause' : (atEnd ? 'Replay the season' : kMonsoonPlay),
-                  icon: Icon(s?.playing == true ? Icons.pause : (atEnd ? Icons.replay : Icons.play_arrow)),
-                  onPressed: () => s?.playing == true ? ctl.pause() : ctl.play(season.last),
-                ),
-                const SizedBox(width: AppSpacing.s8),
-                Expanded(
-                  child: Wrap(
-                    spacing: AppSpacing.s8,
-                    crossAxisAlignment: WrapCrossAlignment.center,
-                    children: [
-                      Text(s == null ? context.tr(kMonsoonPlay) : season.dateLabel(day), style: t.titleSmall),
-                      if (s != null) ...[
-                        Text(rainText, style: t.bodySmall),
+    return panel(
+      Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(season.dateLabel(day), style: t.headline),
+                    const SizedBox(height: AppSpacing.s8),
+                    Wrap(
+                      spacing: AppSpacing.s8,
+                      runSpacing: AppSpacing.s4,
+                      children: [
+                        StatusChip(rainText, tone: StatusTone.info),
                         if (alert != null) _AlertChip(alert),
                       ],
-                    ],
-                  ),
-                ),
-                if (s != null) TextButton(onPressed: ctl.exit, child: const Text(kMonsoonExit)),
-              ],
-            ),
-            Semantics(
-              label: 'Day of the 2025 monsoon',
-              value: season.dateLabel(day),
-              child: SliderTheme(
-                data: SliderTheme.of(context).copyWith(trackHeight: 3),
-                child: Slider(
-                  value: day.toDouble(),
-                  max: season.last.toDouble(),
-                  divisions: season.last,
-                  onChanged: (v) => ctl.seek(v.round()),
-                ),
-              ),
-            ),
-            if (s != null)
-              Padding(
-                padding: const EdgeInsets.only(left: AppSpacing.s8),
-                child: Wrap(
-                  spacing: AppSpacing.s12,
-                  runSpacing: 2,
-                  children: [
-                    _Counter(season.complaintsSoFar[day], kMonsoonComplaints, kMonsoonDot),
-                    _Counter(season.repairsSoFar[day], kMonsoonRepairs, const Color(0xFFB27C00)),
-                    _Counter(season.failedSoFar[day], kMonsoonFailed, kMonsoonRed),
-                    _Counter(season.paidAgainSoFar[day], kMonsoonPaidAgain, kMonsoonRed),
+                    ),
                   ],
                 ),
               ),
-          ],
+              TextButton(onPressed: ctl.exit, child: Text(context.tr(kMonsoonExit))),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.s12),
+          Row(
+            children: [
+              Tooltip(
+                message: playLabel,
+                excludeFromSemantics: true,
+                child: Pressable(
+                  onTap: () => playing ? ctl.pause() : ctl.play(season.last),
+                  semanticLabel: playLabel,
+                  circle: true,
+                  color: c.primary,
+                  pressedColor: c.primaryDark,
+                  haptic: true,
+                  child: SizedBox.square(
+                    dimension: AppSpacing.buttonHeight,
+                    child: Icon(playing ? Icons.pause : (atEnd ? Icons.replay : Icons.play_arrow), color: c.onPrimary),
+                  ),
+                ),
+              ),
+              Expanded(
+                child: _Scrubber(season: season, day: day, onSeek: ctl.seek),
+              ),
+              _SpeedChip(onTap: () => ctl.cycleSpeed(season.last)),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.s12),
+          Text.rich(
+            TextSpan(
+              children: [
+                TextSpan(text: _count(season.repairsSoFar[day]), style: t.figure),
+                TextSpan(text: '  $kMonsoonRepairs so far', style: t.caption),
+              ],
+            ),
+          ),
+          const SizedBox(height: AppSpacing.s4),
+          Wrap(
+            spacing: AppSpacing.s12,
+            runSpacing: AppSpacing.s4,
+            children: [
+              _Counter(season.complaintsSoFar[day], kMonsoonComplaints, kMonsoonDot),
+              _Counter(season.failedSoFar[day], kMonsoonFailed, kMonsoonRed),
+              _Counter(season.paidAgainSoFar[day], kMonsoonPaidAgain, kMonsoonRed),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Black-on-grey slider over a row of weekly ticks with month initials.
+class _Scrubber extends StatelessWidget {
+  const _Scrubber({required this.season, required this.day, required this.onSeek});
+  final Season season;
+  final int day;
+  final ValueChanged<int> onSeek;
+
+  // The slider's track is inset by its overlay radius; the ticks use the same inset.
+  static const double _inset = 16;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = SaartheeColors.of(context);
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Semantics(
+          label: 'Day of the 2025 monsoon',
+          value: season.dateLabel(day),
+          child: SliderTheme(
+            data: SliderTheme.of(context).copyWith(
+              trackHeight: 4,
+              activeTrackColor: c.primary,
+              inactiveTrackColor: c.surfaceAlt,
+              thumbColor: c.primary,
+              overlayColor: c.primary.withValues(alpha: 0.08),
+              thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 8),
+              overlayShape: const RoundSliderOverlayShape(overlayRadius: _inset),
+              trackShape: const RoundedRectSliderTrackShape(),
+              tickMarkShape: SliderTickMarkShape.noTickMark,
+              showValueIndicator: ShowValueIndicator.never,
+            ),
+            child: Slider(
+              value: day.toDouble(),
+              max: season.last.toDouble(),
+              divisions: season.last,
+              onChanged: (v) => onSeek(v.round()),
+            ),
+          ),
+        ),
+        ExcludeSemantics(
+          child: SizedBox(
+            height: 18,
+            child: CustomPaint(
+              size: Size.infinite,
+              painter: _TicksPainter(
+                days: [for (final d in season.days) d['d'] as String],
+                tick: c.borderStrong,
+                text: context.type.caption.copyWith(fontSize: 10, color: c.textSecondary),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _TicksPainter extends CustomPainter {
+  _TicksPainter({required this.days, required this.tick, required this.text});
+  final List<String> days;
+  final Color tick;
+  final TextStyle text;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    const inset = _Scrubber._inset;
+    final w = size.width - 2 * inset;
+    final last = days.length - 1;
+    if (last <= 0 || w <= 0) return;
+    final p = Paint()
+      ..color = tick
+      ..strokeWidth = 1;
+    double x(int i) => inset + w * i / last;
+    for (var i = 0; i <= last; i += 7) {
+      canvas.drawLine(Offset(x(i), 0), Offset(x(i), 4), p);
+    }
+    for (var i = 0; i <= last; i++) {
+      if (!days[i].endsWith('-01')) continue;
+      final tp = TextPainter(
+        text: TextSpan(text: _months[int.parse(days[i].split('-')[1]) - 1], style: text),
+        textDirection: TextDirection.ltr,
+      )..layout();
+      tp.paint(canvas, Offset((x(i) - tp.width / 2).clamp(0, size.width - tp.width), 5));
+    }
+  }
+
+  @override
+  bool shouldRepaint(_TicksPainter old) => old.days != days || old.tick != tick;
+}
+
+/// "1×" / "2×" / "4×": cycles the replay speed.
+class _SpeedChip extends ConsumerStatefulWidget {
+  const _SpeedChip({required this.onTap});
+  final VoidCallback onTap;
+  @override
+  ConsumerState<_SpeedChip> createState() => _SpeedChipState();
+}
+
+class _SpeedChipState extends ConsumerState<_SpeedChip> {
+  @override
+  Widget build(BuildContext context) {
+    final c = SaartheeColors.of(context);
+    final speed = ref.read(monsoonProvider.notifier).speed;
+    return SizedBox(
+      height: AppSpacing.touchTarget,
+      child: Center(
+        child: Pressable(
+          onTap: () => setState(widget.onTap),
+          semanticLabel: 'Replay speed $speed times. Tap to change.',
+          color: c.surfaceAlt,
+          borderRadius: AppRadii.pillRadius,
+          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.s12, vertical: AppSpacing.s8),
+          child: Text('$speed×', style: context.type.label),
         ),
       ),
     );
@@ -339,14 +523,31 @@ class _Counter extends StatelessWidget {
   final Color color;
   @override
   Widget build(BuildContext context) {
-    final t = Theme.of(context).textTheme;
-    return Text.rich(
-      TextSpan(
-        children: [
-          TextSpan(text: _count(n), style: t.labelLarge?.copyWith(color: color, fontWeight: FontWeight.w800)),
-          TextSpan(text: ' $label', style: t.bodySmall),
-        ],
-      ),
+    final t = context.type;
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 6,
+          height: 6,
+          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+        ),
+        const SizedBox(width: AppSpacing.s4),
+        Flexible(
+          child: Text.rich(
+            TextSpan(
+              children: [
+                TextSpan(
+                  text: _count(n),
+                  style: t.caption.copyWith(color: t.body.color, fontWeight: FontWeight.w700),
+                ),
+                TextSpan(text: ' $label'),
+              ],
+            ),
+            style: t.caption,
+          ),
+        ),
+      ],
     );
   }
 }
@@ -356,13 +557,17 @@ class _AlertChip extends StatelessWidget {
   final String alert;
   @override
   Widget build(BuildContext context) {
-    final bg = alertColors[alert] ?? kMonsoonGrey;
+    final bg = MapColors.alert[alert] ?? kMonsoonGrey;
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
-      decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(4)),
+      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.s8, vertical: 3),
+      decoration: ShapeDecoration(color: bg, shape: AppRadii.pill),
       child: Text(
         '$alert alert',
-        style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: alert == 'Yellow' ? Colors.black : Colors.white),
+        style: context.type.label.copyWith(
+          fontSize: 12,
+          height: 16 / 12,
+          color: alert == 'Yellow' ? MapColors.labelText : MapColors.onPin,
+        ),
       ),
     );
   }

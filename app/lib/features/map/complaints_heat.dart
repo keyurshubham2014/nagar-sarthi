@@ -3,15 +3,16 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:latlong2/latlong.dart';
 
 import '../../core/api/api_client.dart';
 import '../../core/flag_strings.dart';
-import '../../core/theme/tokens.dart';
+import '../../core/i18n.dart';
+import '../../core/map/civic_map.dart';
+import '../../core/widgets/ui.dart';
 
 // Cluster shade by complaint count: under 5, under 20, 20+.
 const List<int> heatSteps = [5, 20];
-const List<Color> heatColors = [Color(0xFF9FA8DA), Color(0xFF5C6BC0), Color(0xFF283593)];
+const List<Color> heatColors = MapColors.heat;
 
 Color heatColor(int count) => heatColors[heatSteps.where((s) => count >= s).length];
 
@@ -60,7 +61,7 @@ class _ComplaintsHeatLayerState extends ConsumerState<ComplaintsHeatLayer> {
               point: LatLng((c['lat'] as num).toDouble(), (c['lon'] as num).toDouble()),
               radius: math.min(20, 4 + 1.8 * math.sqrt(c['count'] as num)),
               color: heatColor(c['count'] as int).withValues(alpha: 0.75),
-              borderColor: Colors.white,
+              borderColor: MapColors.label,
               borderStrokeWidth: 1.5,
               hitValue: c,
             ),
@@ -70,61 +71,58 @@ class _ComplaintsHeatLayerState extends ConsumerState<ComplaintsHeatLayer> {
   }
 }
 
+/// Floating status pill over the map (loading, error with retry, empty).
 class _Status extends StatelessWidget {
   const _Status({required this.text, this.onRetry});
   final String text;
   final VoidCallback? onRetry;
   @override
-  Widget build(BuildContext context) => Align(
-    alignment: Alignment.center,
-    child: Card(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.s12, vertical: AppSpacing.s8),
+  Widget build(BuildContext context) {
+    final c = SaartheeColors.of(context);
+    return Align(
+      alignment: Alignment.center,
+      child: Container(
+        margin: const EdgeInsets.all(AppSpacing.gutter),
+        padding: const EdgeInsets.fromLTRB(AppSpacing.s16, AppSpacing.s4, AppSpacing.s4, AppSpacing.s4),
+        constraints: const BoxConstraints(minHeight: AppSpacing.touchTarget),
+        decoration: ShapeDecoration(color: c.surface, shape: AppRadii.pill, shadows: AppElevation.soft(c)),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            if (onRetry == null && text.startsWith('Loading')) ...const [
-              SizedBox.square(dimension: 16, child: CircularProgressIndicator(strokeWidth: 2)),
-              SizedBox(width: AppSpacing.s8),
-            ],
-            Flexible(child: Text(text)),
-            if (onRetry != null) TextButton(onPressed: onRetry, child: const Text('Retry')),
+            Flexible(child: Text(text, style: context.type.label)),
+            if (onRetry != null)
+              TextButton(onPressed: onRetry, child: Text(context.tr('Retry')))
+            else
+              const SizedBox(width: AppSpacing.s12),
           ],
         ),
       ),
-    ),
-  );
+    );
+  }
 }
 
 void showHeatSheet(BuildContext context, Map cluster) {
   final sample = (cluster['sample'] as List).cast<Map>();
   final count = cluster['count'] as int;
-  showModalBottomSheet<void>(
-    context: context,
-    showDragHandle: true,
-    builder: (context) {
-      final t = Theme.of(context).textTheme;
-      return SafeArea(
-        child: ListView(
-          shrinkWrap: true,
-          padding: const EdgeInsets.fromLTRB(AppSpacing.s16, 0, AppSpacing.s16, AppSpacing.s16),
-          children: [
-            Text('$count complaints here · ${cluster['open']} $kHeatOpen', style: t.titleMedium),
-            Text(
-              'Showing ${sample.length} of $count (newest first)',
-              style: t.bodySmall,
-            ),
-            for (final c in sample)
-              ListTile(
-                contentPadding: EdgeInsets.zero,
-                title: Text('${c['category']} · ${c['locality']}'),
-                subtitle: Text(
-                  '${c['status']}${c['repeat'] == true ? ' · $kRepairReopened' : ''} · ${(c['received_at'] as String).split(' ').first}',
-                ),
-              ),
-          ],
-        ),
-      );
-    },
+  showAppSheet<void>(
+    context,
+    title: '$count complaints here · ${cluster['open']} $kHeatOpen',
+    builder: (context) => Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Gutter(child: Text('Showing ${sample.length} of $count (newest first)', style: context.type.caption)),
+        const SizedBox(height: AppSpacing.s8),
+        for (final (i, c) in sample.indexed)
+          ListRow(
+            icon: Icons.report_outlined,
+            title: '${c['category']} · ${c['locality']}',
+            caption:
+                '${c['status']}${c['repeat'] == true ? ' · $kRepairReopened' : ''} · ${(c['received_at'] as String).split(' ').first}',
+            chevron: false,
+            divider: i < sample.length - 1,
+          ),
+        const SizedBox(height: AppSpacing.s16),
+      ],
+    ),
   );
 }
