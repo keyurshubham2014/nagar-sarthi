@@ -4,10 +4,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../i18n.dart';
 import '../theme/tokens.dart';
 import '../theme/typography.dart';
+import 'motion.dart';
 
-// Adapted from Saarthee core/widgets (navigation_bar, app_bar, home_header,
-// report_card, cards, page_layout). Saarthee's l10n, motion and haptics are
-// dropped; strings come from core/i18n.dart.
+// The original shared widgets, restyled in place for the design overhaul
+// (docs/design/design-overhaul.md): same constructors, new look. New screens
+// use the components in ui.dart; these stay until every screen is redesigned.
 
 /// Five labelled tabs with a sliding `primaryContainer` pill behind the active
 /// icon; the centre action is always in `sunrise` (Saarthee DS §5).
@@ -137,25 +138,18 @@ class HeaderCircleButton extends StatelessWidget {
     return Tooltip(
       message: tooltip,
       excludeFromSemantics: true,
-      child: Semantics(
-        button: true,
-        label: tooltip,
-        child: SizedBox.square(
-          dimension: AppSpacing.touchTarget,
-          child: Material(
-            type: MaterialType.transparency,
-            child: InkResponse(
-              onTap: onPressed,
-              radius: AppSpacing.touchTarget / 2,
-              child: Center(
-                child: Container(
-                  width: AppSpacing.headerButton,
-                  height: AppSpacing.headerButton,
-                  alignment: Alignment.center,
-                  decoration: BoxDecoration(shape: BoxShape.circle, color: onDark ? NeemFixed.headerButton : c.surfaceAlt),
-                  child: ExcludeSemantics(child: child),
-                ),
-              ),
+      child: SizedBox.square(
+        dimension: AppSpacing.touchTarget,
+        child: Center(
+          child: Pressable(
+            onTap: onPressed,
+            semanticLabel: tooltip,
+            circle: true,
+            color: onDark ? NeemFixed.headerButton : c.surfaceAlt,
+            pressedColor: onDark ? NeemFixed.white.withValues(alpha: 0.24) : c.surfacePressed,
+            child: SizedBox.square(
+              dimension: AppSpacing.headerButton,
+              child: Center(child: child),
             ),
           ),
         ),
@@ -225,44 +219,50 @@ class SaartheeAppBar extends StatelessWidget implements PreferredSizeWidget {
 
   /// Long titles use the smaller title size and may wrap to two lines.
   bool get _long => title.length > 22;
-  double get _toolbar => subtitle == null ? (_long ? 72 : 64) : (_long ? 92 : 72);
+  double get _toolbar => subtitle == null ? (_long ? 72 : 64) : (_long ? 92 : 80);
 
   @override
   Size get preferredSize => Size.fromHeight(_toolbar + (bottom?.preferredSize.height ?? 0));
 
   @override
   Widget build(BuildContext context) {
-    final c = SaartheeColors.of(context);
-    final t = Theme.of(context).textTheme;
+    final t = AppTypeScale.of(context);
     final canPop = showBack && Navigator.of(context).canPop();
+    // Root tabs get the large display title; detail pages a headline beside the round back button.
+    final style = _long ? t.title : (canPop ? t.headline : t.display.copyWith(fontSize: 30, height: 36 / 30));
     return AppBar(
       automaticallyImplyLeading: false,
       toolbarHeight: _toolbar,
+      leadingWidth: AppSpacing.touchTarget + AppSpacing.s12,
       leading: canPop
-          ? IconButton(tooltip: 'Back', icon: const Icon(Icons.arrow_back), onPressed: () => Navigator.of(context).maybePop())
+          ? const Padding(padding: EdgeInsetsDirectional.only(start: AppSpacing.s8), child: _BackButton())
           : null,
-      titleSpacing: canPop ? 0 : AppSpacing.gutter,
+      titleSpacing: canPop ? AppSpacing.s4 : AppSpacing.gutter,
       title: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
           Semantics(
             header: true,
-            child: Text(
-              title,
-              style: _long ? t.titleLarge : t.headlineSmall,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-            ),
+            child: Text(title, style: style, maxLines: 2, overflow: TextOverflow.ellipsis),
           ),
-          if (subtitle != null) Text(subtitle!, style: t.bodySmall, maxLines: 1, overflow: TextOverflow.ellipsis),
+          if (subtitle != null) Text(subtitle!, style: t.caption, maxLines: 1, overflow: TextOverflow.ellipsis),
         ],
       ),
       actions: [...actions, const SizedBox(width: AppSpacing.s8)],
-      shape: Border(bottom: BorderSide(color: c.border)),
       bottom: bottom,
     );
   }
+}
+
+class _BackButton extends StatelessWidget {
+  const _BackButton();
+  @override
+  Widget build(BuildContext context) => HeaderCircleButton(
+    tooltip: MaterialLocalizations.of(context).backButtonTooltip,
+    onPressed: () => Navigator.of(context).maybePop(),
+    child: Icon(Icons.arrow_back, size: 20, color: SaartheeColors.of(context).textPrimary),
+  );
 }
 
 /// Centers content at max 600 dp wide (DS §4); keeps wide web from stretching.
@@ -279,8 +279,9 @@ class ContentWidth extends StatelessWidget {
   );
 }
 
-/// The `sunrise` action card: ≥ 56 dp, "+" in a circle, title + hint, arrow, glow.
-/// The only `sunrise` element on its screen (Report actions only).
+/// The report action: a white search-style card with a black "+" circle,
+/// title + hint and an arrow; floats with a soft shadow (works on the dark
+/// Home band and on white).
 class SunriseActionCard extends StatelessWidget {
   const SunriseActionCard({super.key, required this.title, required this.hint, required this.onPressed, this.icon = Icons.add});
   final String title;
@@ -289,99 +290,58 @@ class SunriseActionCard extends StatelessWidget {
   final IconData icon;
 
   @override
-  Widget build(BuildContext context) {
-    final c = SaartheeColors.of(context);
-    final t = Theme.of(context).textTheme;
-    final fg = c.onSunrise;
-    return Semantics(
-      button: true,
-      label: '$title. $hint',
-      excludeSemantics: true,
-      child: DecoratedBox(
-        decoration: BoxDecoration(borderRadius: AppRadii.controlRadius, boxShadow: AppElevation.reportGlow(c)),
-        child: Material(
-          color: c.sunrise,
-          borderRadius: AppRadii.controlRadius,
-          child: InkWell(
-            borderRadius: AppRadii.controlRadius,
-            onTap: onPressed,
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(minHeight: AppSpacing.reportCardMinHeight),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.s14, vertical: AppSpacing.s12),
-                child: Row(
-                  children: [
-                    Container(
-                      width: 32,
-                      height: 32,
-                      decoration: BoxDecoration(shape: BoxShape.circle, color: fg.withValues(alpha: 0.2)),
-                      child: Icon(icon, color: fg, size: 22),
-                    ),
-                    const SizedBox(width: AppSpacing.s12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(title, style: t.titleMedium?.copyWith(color: fg)),
-                          Text(hint, style: t.bodySmall?.copyWith(color: fg)),
-                        ],
-                      ),
-                    ),
-                    Icon(Icons.arrow_forward, color: fg),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
+  Widget build(BuildContext context) => _ActionCard(
+    title: title,
+    hint: hint,
+    onPressed: onPressed,
+    icon: icon,
+    iconFilled: true,
+  );
 }
 
-/// White card on the header band for staff (same shape as the sunrise card, no sunrise).
-class HeaderActionCard extends StatelessWidget {
-  const HeaderActionCard({super.key, required this.title, required this.hint, required this.onPressed, required this.icon});
+class _ActionCard extends StatelessWidget {
+  const _ActionCard({required this.title, required this.hint, required this.onPressed, required this.icon, required this.iconFilled});
   final String title;
   final String hint;
   final VoidCallback onPressed;
   final IconData icon;
+  final bool iconFilled;
 
   @override
   Widget build(BuildContext context) {
     final c = SaartheeColors.of(context);
-    final t = Theme.of(context).textTheme;
-    return Material(
-      color: c.surface,
-      borderRadius: AppRadii.controlRadius,
-      elevation: 2,
-      shadowColor: c.shadow.withValues(alpha: 0.2),
-      child: InkWell(
-        borderRadius: AppRadii.controlRadius,
+    final t = AppTypeScale.of(context);
+    return DecoratedBox(
+      decoration: BoxDecoration(borderRadius: AppRadii.cardRadius, boxShadow: AppElevation.floating(c)),
+      child: Pressable(
         onTap: onPressed,
+        semanticLabel: '$title. $hint',
+        color: c.isDark ? c.surfaceAlt : c.surface,
+        pressedColor: c.isDark ? c.surfacePressed : c.surfaceAlt,
+        borderRadius: AppRadii.cardRadius,
         child: ConstrainedBox(
-          constraints: const BoxConstraints(minHeight: AppSpacing.reportCardMinHeight),
+          constraints: const BoxConstraints(minHeight: AppSpacing.reportCardMinHeight + 8),
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.s14, vertical: AppSpacing.s12),
+            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.s12, vertical: AppSpacing.s12),
             child: Row(
               children: [
                 Container(
-                  width: 36,
-                  height: 36,
-                  decoration: BoxDecoration(shape: BoxShape.circle, color: c.primaryContainer),
-                  child: Icon(icon, color: c.onPrimaryContainer, size: 20),
+                  width: 40,
+                  height: 40,
+                  decoration: BoxDecoration(shape: BoxShape.circle, color: iconFilled ? c.primary : c.surfaceAlt),
+                  child: Icon(icon, color: iconFilled ? c.onPrimary : c.textPrimary, size: 22),
                 ),
                 const SizedBox(width: AppSpacing.s12),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(title, style: t.titleMedium),
-                      Text(hint, style: t.bodySmall),
+                      Text(title, style: t.bodyStrong.copyWith(fontWeight: FontWeight.w700)),
+                      Text(hint, style: t.caption),
                     ],
                   ),
                 ),
-                Icon(Icons.arrow_forward, color: c.primary),
+                Icon(Icons.arrow_forward, color: c.textPrimary),
               ],
             ),
           ),
@@ -391,33 +351,82 @@ class HeaderActionCard extends StatelessWidget {
   }
 }
 
-/// Stat tile (DS §5): `surfaceAlt`, radius 14, figure and a small label.
+/// Staff twin of [SunriseActionCard]: same white floating card, grey icon well.
+class HeaderActionCard extends StatelessWidget {
+  const HeaderActionCard({super.key, required this.title, required this.hint, required this.onPressed, required this.icon});
+  final String title;
+  final String hint;
+  final VoidCallback onPressed;
+  final IconData icon;
+
+  @override
+  Widget build(BuildContext context) => _ActionCard(
+    title: title,
+    hint: hint,
+    onPressed: onPressed,
+    icon: icon,
+    iconFilled: false,
+  );
+}
+
+/// Stat tile: grey, radius 16, figure (24/700 tabular) on top, caption
+/// below, optional status [dot]. [StatTile.count] counts a number up once.
 class StatTile extends StatelessWidget {
-  const StatTile({super.key, required this.value, required this.label, this.color});
+  const StatTile({super.key, required this.value, required this.label, this.color, this.dot, this.onTap})
+    : count = null,
+      format = null;
+
+  /// A figure that counts up from zero on first appearance.
+  const StatTile.count({super.key, required num this.count, this.format, required this.label, this.color, this.dot, this.onTap})
+    : value = '';
+
   final String value;
+  final num? count;
+  final String Function(num v)? format;
   final String label;
+
+  /// Status colour for the figure.
   final Color? color;
+
+  /// Tiny status dot after the caption.
+  final Color? dot;
+  final VoidCallback? onTap;
+
   @override
   Widget build(BuildContext context) {
     final c = SaartheeColors.of(context);
+    final t = AppTypeScale.of(context);
+    final style = t.figure.copyWith(color: color);
+    final shown = count == null ? value : (format ?? (num v) => v.round().toString())(count!);
     return Semantics(
       container: true,
-      label: '$label: $value',
+      button: onTap != null,
+      label: '$label: $shown',
       excludeSemantics: true,
-      child: Container(
-        padding: const EdgeInsets.all(AppSpacing.s12),
-        decoration: BoxDecoration(color: c.surfaceAlt, borderRadius: AppRadii.controlRadius),
+      child: Pressable(
+        onTap: onTap,
+        color: c.surfaceAlt,
+        borderRadius: AppRadii.tileRadius,
+        padding: const EdgeInsets.all(AppSpacing.s14),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
           children: [
             FittedBox(
               fit: BoxFit.scaleDown,
-              alignment: Alignment.centerLeft,
-              child: Text(value, style: AppTypography.numeric(c).copyWith(color: color)),
+              alignment: AlignmentDirectional.centerStart,
+              child: count == null ? Text(value, style: style) : AnimatedCount(value: count!, format: format, style: style),
             ),
             const SizedBox(height: AppSpacing.s4),
-            Text(label, style: Theme.of(context).textTheme.bodySmall),
+            Row(
+              children: [
+                Flexible(child: Text(label, style: t.caption)),
+                if (dot != null) ...[
+                  const SizedBox(width: 6),
+                  Container(width: 6, height: 6, decoration: BoxDecoration(color: dot, shape: BoxShape.circle)),
+                ],
+              ],
+            ),
           ],
         ),
       ),
@@ -435,7 +444,7 @@ class StatRow extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         for (var i = 0; i < tiles.length; i++) ...[
-          if (i > 0) const SizedBox(width: AppSpacing.s8),
+          if (i > 0) const SizedBox(width: AppSpacing.tileGap),
           Expanded(child: tiles[i]),
         ],
       ],
@@ -443,18 +452,19 @@ class StatRow extends StatelessWidget {
   );
 }
 
-/// Section heading (DS §4: 24 above, 12 below, titleLarge).
+/// Bold section heading (headline 24/700), 32 above and 12 below, optional
+/// trailing widget (e.g. a "See all" text button).
 class SectionHeading extends StatelessWidget {
   const SectionHeading(this.text, {super.key, this.trailing});
   final String text;
   final Widget? trailing;
   @override
   Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.only(top: AppSpacing.sectionTitleTop, bottom: AppSpacing.s8),
+    padding: const EdgeInsets.only(top: AppSpacing.sectionTitleTop, bottom: AppSpacing.sectionTitleBottom),
     child: Row(
       children: [
         Expanded(
-          child: Semantics(header: true, child: Text(text, style: Theme.of(context).textTheme.titleLarge)),
+          child: Semantics(header: true, child: Text(text, style: AppTypeScale.of(context).headline)),
         ),
         ?trailing,
       ],
@@ -462,7 +472,8 @@ class SectionHeading extends StatelessWidget {
   );
 }
 
-/// Rounded white card with a leading icon badge, title, subtitle and chevron; whole card tappable.
+/// Grey rounded row: white icon well, title, subtitle and chevron; the whole
+/// row is tappable (press: scale + darker grey).
 class NavCard extends StatelessWidget {
   const NavCard({super.key, required this.icon, required this.title, this.subtitle, required this.onTap, this.trailing});
   final IconData icon;
@@ -473,42 +484,39 @@ class NavCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = SaartheeColors.of(context);
-    final t = Theme.of(context).textTheme;
+    final t = AppTypeScale.of(context);
     return Padding(
       padding: const EdgeInsets.only(bottom: AppSpacing.s8),
-      child: Material(
-        color: c.surface,
-        shape: RoundedRectangleBorder(borderRadius: AppRadii.cardRadius, side: BorderSide(color: c.border)),
-        clipBehavior: Clip.antiAlias,
-        child: InkWell(
-          onTap: onTap,
-          child: ConstrainedBox(
-            constraints: BoxConstraints(minHeight: subtitle == null ? 56 : 72),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.s14, vertical: AppSpacing.s12),
-              child: Row(
-                children: [
-                  Container(
-                    width: AppSpacing.categoryBadge,
-                    height: AppSpacing.categoryBadge,
-                    decoration: BoxDecoration(color: c.primaryContainer, borderRadius: AppRadii.controlRadius),
-                    child: Icon(icon, color: c.onPrimaryContainer, size: 22),
+      child: Pressable(
+        onTap: onTap,
+        color: c.surfaceAlt,
+        borderRadius: AppRadii.tileRadius,
+        child: ConstrainedBox(
+          constraints: BoxConstraints(minHeight: subtitle == null ? 56 : AppSpacing.listRow + 8),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.s14, vertical: AppSpacing.s12),
+            child: Row(
+              children: [
+                Container(
+                  width: AppSpacing.categoryBadge,
+                  height: AppSpacing.categoryBadge,
+                  decoration: BoxDecoration(color: c.isDark ? c.surfacePressed : c.surface, shape: BoxShape.circle),
+                  child: Icon(icon, color: c.textPrimary, size: 20),
+                ),
+                const SizedBox(width: AppSpacing.s12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(title, style: t.bodyStrong),
+                      if (subtitle != null) Text(subtitle!, style: t.caption),
+                    ],
                   ),
-                  const SizedBox(width: AppSpacing.s12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(title, style: t.titleMedium),
-                        if (subtitle != null) Text(subtitle!, style: t.bodySmall),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(width: AppSpacing.s8),
-                  trailing ?? Icon(Icons.chevron_right, color: c.textSecondary),
-                ],
-              ),
+                ),
+                const SizedBox(width: AppSpacing.s8),
+                trailing ?? Icon(Icons.chevron_right, color: c.textSecondary),
+              ],
             ),
           ),
         ),

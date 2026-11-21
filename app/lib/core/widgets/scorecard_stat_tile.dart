@@ -34,8 +34,8 @@ class ScorecardStatTile extends StatelessWidget {
       label: '$label: ${v ?? emptyText}',
       child: ExcludeSemantics(
         child: Container(
-          padding: const EdgeInsets.all(AppSpacing.s12),
-          decoration: BoxDecoration(color: c.surfaceAlt, borderRadius: AppRadii.controlRadius),
+          padding: const EdgeInsets.all(AppSpacing.s14),
+          decoration: BoxDecoration(color: c.surfaceAlt, borderRadius: AppRadii.tileRadius),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
