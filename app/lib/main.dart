@@ -20,14 +20,21 @@ class NagarSarthiApp extends StatelessWidget {
   const NagarSarthiApp({super.key});
 
   @override
-  Widget build(BuildContext context) => MaterialApp.router(
-    title: 'Nagar Sarthi',
-    debugShowCheckedModeBanner: false,
-    scrollBehavior: const AppScrollBehavior(),
-    scaffoldMessengerKey: rootMessengerKey,
-    theme: AppTheme.light(),
-    darkTheme: AppTheme.dark(),
-    routerConfig: appRouter,
-    builder: (context, child) => Consumer(builder: (_, ref, _) => LangScope(lang: ref.watch(langProvider), child: child!)),
+  Widget build(BuildContext context) => Consumer(
+    builder: (_, ref, _) {
+      final lang = ref.watch(langProvider);
+      // Devanagari text gets no negative tracking and a little more line height.
+      final devanagari = AppTheme.isDevanagari(lang);
+      return MaterialApp.router(
+        title: 'Nagar Sarthi',
+        debugShowCheckedModeBanner: false,
+        scrollBehavior: const AppScrollBehavior(),
+        scaffoldMessengerKey: rootMessengerKey,
+        theme: AppTheme.light(devanagari: devanagari),
+        darkTheme: AppTheme.dark(devanagari: devanagari),
+        routerConfig: appRouter,
+        builder: (context, child) => LangScope(lang: lang, child: child!),
+      );
+    },
   );
 }
