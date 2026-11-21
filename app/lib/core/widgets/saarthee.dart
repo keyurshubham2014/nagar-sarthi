@@ -174,6 +174,7 @@ class LanguageButton extends ConsumerWidget {
       onDark: onDark,
       onPressed: () => showModalBottomSheet<void>(
         context: context,
+        useRootNavigator: true, // above the floating tab bar
         builder: (sheet) => SafeArea(
           child: Column(
             mainAxisSize: MainAxisSize.min,

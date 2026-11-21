@@ -3,40 +3,65 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/i18n.dart';
 import '../../core/prefs.dart';
-import '../../core/theme/tokens.dart';
-import '../../core/widgets/saarthee.dart';
+import '../../core/widgets/ui.dart';
 import '../map/map_data.dart';
 import '../officer/officer_panels.dart';
 import 'ward_picker.dart';
 
-/// My Ward tab: the chosen ward as a page, with a change-ward card on top.
-class MyWardScreen extends ConsumerWidget {
+/// My Ward tab: the chosen ward's page under a large "Ward E" title with a
+/// change-ward pill; the title moves into the top bar as the page scrolls.
+class MyWardScreen extends ConsumerStatefulWidget {
   const MyWardScreen({super.key});
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<MyWardScreen> createState() => _MyWardScreenState();
+}
+
+class _MyWardScreenState extends ConsumerState<MyWardScreen> {
+  final _sc = ScrollController();
+
+  @override
+  void dispose() {
+    _sc.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final c = SaartheeColors.of(context);
+    final t = context.type;
     final code = ref.watch(chosenWardProvider);
     final name = ref.watch(mapDataProvider).value?.wardByCode[code]?.name;
+    final title = context.tr('Ward {w}', {'w': code});
     return Scaffold(
-      appBar: SaartheeAppBar(title: context.tr('My Ward'), subtitle: name, showBack: false),
-      body: WardPanel(
-        code,
-        key: ValueKey(code),
-        header: Container(
-          padding: const EdgeInsets.fromLTRB(AppSpacing.s16, AppSpacing.s8, AppSpacing.s8, AppSpacing.s8),
-          decoration: AppElevation.cardDecoration(c),
-          child: Row(
-            children: [
-              Icon(Icons.location_city, color: c.primary),
-              const SizedBox(width: AppSpacing.s12),
-              Expanded(
-                child: Text(
-                  '${context.tr('Ward {w}', {'w': code})}${name == null ? '' : ' · $name'}',
-                  style: Theme.of(context).textTheme.titleMedium,
-                ),
+      backgroundColor: c.background,
+      appBar: TopBar(
+        title: title,
+        controller: _sc,
+        showBack: false,
+        actions: [RoundIconButton(icon: Icons.swap_horiz, tooltip: context.tr('Change ward'), onPressed: () => pickWard(context, ref))],
+      ),
+      body: ExtendUnderTabBar(
+        // WardPanel's list is `primary`: it scrolls with this controller, which drives the bar title.
+        child: PrimaryScrollController(
+          controller: _sc,
+          child: WardPanel(
+            code,
+            key: ValueKey(code),
+            header: Padding(
+              padding: const EdgeInsets.fromLTRB(AppSpacing.gutter, 0, AppSpacing.gutter, AppSpacing.s24),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Semantics(header: true, child: Text(title, style: t.display)),
+                  if (name != null) ...[
+                    const SizedBox(height: AppSpacing.s4),
+                    Text(name, style: t.caption.copyWith(fontSize: 15, height: 22 / 15)),
+                  ],
+                  const SizedBox(height: AppSpacing.s12),
+                  WardPillButton(label: context.tr('Change ward'), onTap: () => pickWard(context, ref)),
+                ],
               ),
-              TextButton(onPressed: () => pickWard(context, ref), child: Text(context.tr('Change'))),
-            ],
+            ),
           ),
         ),
       ),

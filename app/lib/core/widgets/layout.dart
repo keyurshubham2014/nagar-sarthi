@@ -46,6 +46,7 @@ class _BarRow extends StatelessWidget {
     required this.showBack,
     required this.actions,
     this.onBack,
+    this.leading,
   });
   final String? title;
   final double titleOpacity;
@@ -53,6 +54,9 @@ class _BarRow extends StatelessWidget {
   final bool showBack;
   final List<Widget> actions;
   final VoidCallback? onBack;
+
+  /// Shown instead of the back button; the collapsed title is then hidden (no room).
+  final Widget? leading;
 
   @override
   Widget build(BuildContext context) {
@@ -73,8 +77,10 @@ class _BarRow extends StatelessWidget {
                     padding: const EdgeInsetsDirectional.only(start: AppSpacing.s8),
                     child: BackCircleButton(onPressed: onBack),
                   )
-                : null,
-            middle: title == null
+                : leading == null
+                ? null
+                : Padding(padding: const EdgeInsetsDirectional.only(start: AppSpacing.gutter), child: leading),
+            middle: title == null || (leading != null && !showBack)
                 ? null
                 : Opacity(
                     opacity: titleOpacity,
@@ -193,6 +199,7 @@ class LargeTitleScaffold extends StatefulWidget {
     this.showBack,
     this.detail,
     this.maxWidth = AppSpacing.maxContent,
+    this.leading,
   }) : assert((children == null) != (slivers == null), 'Pass children or slivers');
 
   final String title;
@@ -220,6 +227,10 @@ class LargeTitleScaffold extends StatefulWidget {
   /// Headline-size title (detail pages). Default: when the route can pop.
   final bool? detail;
   final double maxWidth;
+
+  /// Pinned bar's start slot when there is no back button (e.g. Home's ward
+  /// pill); the collapsed title is then not shown.
+  final Widget? leading;
 
   @override
   State<LargeTitleScaffold> createState() => _LargeTitleScaffoldState();
@@ -261,6 +272,7 @@ class _LargeTitleScaffoldState extends State<LargeTitleScaffold> {
               lineOpacity: k,
               showBack: back,
               actions: widget.actions,
+              leading: widget.leading,
             ),
           ),
         ),

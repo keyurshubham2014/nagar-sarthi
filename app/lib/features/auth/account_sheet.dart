@@ -5,15 +5,11 @@ import '../../app_router.dart';
 import '../../core/api/api_client.dart';
 import '../../core/auth/session.dart';
 import '../../core/i18n.dart';
-import '../../core/theme/tokens.dart';
+import '../../core/widgets/ui.dart';
 
 /// Account sheet from Home's account button: who is signed in, the three
-/// "Demo:" switches, sign in / switch account, sign out, and About this data.
-Future<void> showAccountSheet(BuildContext context) => showModalBottomSheet<void>(
-  context: context,
-  isScrollControlled: true,
-  builder: (_) => const _AccountSheet(),
-);
+/// "Demo:" switches, sign in / switch account, language, About this data, sign out.
+Future<void> showAccountSheet(BuildContext context) => showAppSheet<void>(context, builder: (_) => const _AccountSheet());
 
 class _AccountSheet extends ConsumerWidget {
   const _AccountSheet();
@@ -21,50 +17,60 @@ class _AccountSheet extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final s = ref.watch(sessionProvider);
     final c = SaartheeColors.of(context);
-    final t = Theme.of(context).textTheme;
+    final t = context.type;
     final notifier = ref.read(sessionProvider.notifier);
     final messenger = ScaffoldMessenger.of(context);
-    return SafeArea(
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.fromLTRB(AppSpacing.gutter, 0, AppSpacing.gutter, AppSpacing.s16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Row(
-              children: [
-                CircleAvatar(
-                  radius: 24,
-                  backgroundColor: c.primaryContainer,
-                  child: Icon(s == null ? Icons.person_outline : Icons.person, color: c.onPrimaryContainer),
-                ),
-                const SizedBox(width: AppSpacing.s12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(s == null ? context.tr('Not signed in') : context.tr(roleLabels[s.role] ?? s.role), style: t.titleLarge),
+    void go(String path) {
+      Navigator.pop(context);
+      appRouter.push(path);
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Gutter(
+          child: Row(
+            children: [
+              Container(
+                width: AppSpacing.s56,
+                height: AppSpacing.s56,
+                decoration: BoxDecoration(color: s == null ? c.surfaceAlt : c.primary, shape: BoxShape.circle),
+                child: Icon(s == null ? Icons.person_outline : Icons.person, color: s == null ? c.textPrimary : c.onPrimary, size: 28),
+              ),
+              const SizedBox(width: AppSpacing.s16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(s == null ? context.tr('Not signed in') : s.phone, style: t.title),
+                    const SizedBox(height: AppSpacing.s4),
+                    if (s == null)
                       Text(
-                        s == null
-                            ? context.tr('The map and ward figures are open to everyone. Sign in to file a complaint or draft a notice.')
-                            : '${s.phone}${s.ward == null ? '' : ' · ${context.tr('Ward {w}', {'w': s.ward})}'}',
-                        style: t.bodySmall,
+                        context.tr('The map and ward figures are open to everyone. Sign in to file a complaint or draft a notice.'),
+                        style: t.caption,
+                      )
+                    else
+                      StatusChip(
+                        '${context.tr(roleLabels[s.role] ?? s.role)}${s.ward == null ? '' : ' · ${context.tr('Ward {w}', {'w': s.ward})}'}',
                       ),
-                    ],
-                  ),
+                  ],
                 ),
-              ],
-            ),
-            const SizedBox(height: AppSpacing.s16),
-            Text(context.tr('Demo: switch role in one tap'), style: t.labelLarge),
-            const SizedBox(height: AppSpacing.s8),
-            Wrap(
-              spacing: AppSpacing.s8,
-              runSpacing: AppSpacing.s8,
-              children: [
-                for (final e in roleLabels.entries)
-                  if (s?.role != e.key)
-                    OutlinedButton(
-                      onPressed: () async {
+              ),
+            ],
+          ),
+        ),
+        const SectionBreak(space: AppSpacing.s20),
+        Gutter(child: Text(context.tr('Demo: switch role in one tap'), style: t.label.copyWith(color: c.textSecondary))),
+        const SizedBox(height: AppSpacing.s8),
+        FilterChipRow(
+          children: [
+            for (final e in roleLabels.entries)
+              FilterPill(
+                label: context.tr(e.value),
+                selected: s?.role == e.key,
+                onTap: s?.role == e.key
+                    ? null
+                    : () async {
                         Navigator.pop(context);
                         try {
                           await notifier.signInAsDemo(e.key);
@@ -72,44 +78,58 @@ class _AccountSheet extends ConsumerWidget {
                           messenger.showSnackBar(SnackBar(content: Text('Could not sign in: ${err.message}')));
                         }
                       },
-                      child: Text('Demo: ${context.tr(e.value)}'),
-                    ),
-              ],
-            ),
-            const SizedBox(height: AppSpacing.s8),
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              leading: const Icon(Icons.login),
-              title: Text(context.tr(s == null ? 'Sign in with a number…' : 'Switch account…')),
-              onTap: () {
-                Navigator.pop(context);
-                appRouter.push('/sign-in');
-              },
-            ),
-            if (s != null)
-              ListTile(
-                contentPadding: EdgeInsets.zero,
-                leading: const Icon(Icons.logout),
-                title: Text(context.tr('Sign out')),
-                onTap: () {
-                  Navigator.pop(context);
-                  notifier.signOut();
-                },
               ),
-            const Divider(),
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              leading: const Icon(Icons.info_outline),
-              title: Text(context.tr('About this data')),
-              subtitle: Text(context.tr('Synthetic data, how flags work, credits')),
-              onTap: () {
-                Navigator.pop(context);
-                appRouter.push('/about');
-              },
-            ),
           ],
         ),
-      ),
+        const SizedBox(height: AppSpacing.s12),
+        ListRow(
+          title: context.tr(s == null ? 'Sign in with a number…' : 'Switch account…'),
+          icon: Icons.login,
+          onTap: () => go('/sign-in'),
+        ),
+        ListRow(
+          title: context.tr('Language'),
+          icon: Icons.translate,
+          trailing: SizedBox(
+            width: 168,
+            child: SegmentedControl<String>(
+              segments: const [('en', 'EN'), ('hi', 'हिं'), ('mr', 'मरा')],
+              value: context.lang,
+              onChanged: (l) => ref.read(langProvider.notifier).set(l),
+            ),
+          ),
+        ),
+        ListRow(
+          title: context.tr('About this data'),
+          caption: context.tr('Synthetic data, how flags work, credits'),
+          icon: Icons.info_outline,
+          divider: s != null,
+          onTap: () => go('/about'),
+        ),
+        if (s != null)
+          Pressable(
+            onTap: () {
+              Navigator.pop(context);
+              notifier.signOut();
+            },
+            scale: false,
+            semanticLabel: context.tr('Sign out'),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(minHeight: AppSpacing.listRow),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.gutter),
+                child: Row(
+                  children: [
+                    SizedBox(width: 40, child: Icon(Icons.logout, color: c.error, size: 20)),
+                    const SizedBox(width: AppSpacing.s16),
+                    Text(context.tr('Sign out'), style: t.bodyStrong.copyWith(color: c.error)),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        const SizedBox(height: AppSpacing.s8),
+      ],
     );
   }
 }

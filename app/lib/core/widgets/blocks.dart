@@ -413,7 +413,10 @@ class StatusChip extends StatelessWidget {
 /// Slim progress bar: black fill on grey; above 1.0 the overshoot is red.
 /// Grows from zero on first paint (standard motion).
 class ProgressBar extends StatelessWidget {
-  const ProgressBar({super.key, required this.value, this.color, this.height = 6, this.semanticLabel});
+  const ProgressBar({super.key, required this.value, this.color, this.height = 6, this.semanticLabel, this.trackColor});
+
+  /// Unfilled part (default grey; pass `surface` when the bar sits on a grey tile).
+  final Color? trackColor;
 
   /// 0..n (1 = 100%).
   final double value;
@@ -437,7 +440,7 @@ class ProgressBar extends StatelessWidget {
           borderRadius: BorderRadius.circular(height),
           child: Container(
             height: height,
-            color: over ? c.error : c.surfaceAlt,
+            color: over ? c.error : trackColor ?? c.surfaceAlt,
             alignment: AlignmentDirectional.centerStart,
             child: FractionallySizedBox(
               widthFactor: (over ? 1 / v : v) * k,

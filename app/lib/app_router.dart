@@ -19,6 +19,7 @@ import 'features/officer/panel.dart';
 import 'features/shell/shell_scaffold.dart';
 import 'features/trail/trail_screen.dart';
 import 'features/ward/my_ward_screen.dart';
+import 'features/ward/ward_comparison_screen.dart';
 
 final rootNavigatorKey = GlobalKey<NavigatorState>();
 
@@ -47,6 +48,7 @@ final appRouter = GoRouter(
     GoRoute(path: '/dev/gallery', builder: (_, _) => const GalleryScreen()),
     GoRoute(path: '/sign-in', builder: (_, _) => const SignInScreen()),
     GoRoute(path: '/about', builder: (_, _) => const AboutScreen()),
+    GoRoute(path: '/wards', builder: (_, _) => const WardComparisonScreen()),
     GoRoute(
       path: '/ward',
       redirect: (_, s) => _q(s, 'code') == null ? '/' : null,

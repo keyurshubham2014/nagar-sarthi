@@ -395,4 +395,22 @@ const Map<String, Map<String, String>> _strings = {
   'Road': {'hi': 'सड़क', 'mr': 'रस्ता'},
   'Contractor': {'hi': 'ठेकेदार', 'mr': 'कंत्राटदार'},
   'Cost': {'hi': 'लागत', 'mr': 'खर्च'},
+
+  // Home, ward comparison, ward picker, report card (phase 2, screen A)
+  'Do something': {'hi': 'कुछ करें', 'mr': 'काही करा'},
+  'Complaint trail': {'hi': 'शिकायत का रास्ता', 'mr': 'तक्रारीचा मार्ग'},
+  '{n} jobs across Mumbai · see wards': {'hi': 'पूरी मुंबई में {n} काम · वार्ड देखें', 'mr': 'संपूर्ण मुंबईत {n} कामे · वॉर्ड पाहा'},
+  'Could not load the city figures.': {'hi': 'शहर के आंकड़े लोड नहीं हो सके।', 'mr': 'शहराचे आकडे लोड होऊ शकले नाहीत.'},
+  'Could not load ward {w}.': {'hi': 'वार्ड {w} लोड नहीं हो सका।', 'mr': 'वॉर्ड {w} लोड होऊ शकला नाही.'},
+  'Wards this monsoon': {'hi': 'इस मानसून में वार्ड', 'mr': 'या पावसाळ्यातील वॉर्ड'},
+  'Tap a ward to open its page.': {'hi': 'वार्ड का पेज खोलने के लिए उस पर टैप करें।', 'mr': 'वॉर्डचे पान उघडण्यासाठी त्यावर टॅप करा.'},
+  'To review': {'hi': 'जांच बाकी', 'mr': 'तपासणी बाकी'},
+  'Over budget': {'hi': 'बजट से ज़्यादा', 'mr': 'बजेटपेक्षा जास्त'},
+  '{n} jobs': {'hi': '{n} काम', 'mr': '{n} कामे'},
+  '{p} of spend': {'hi': 'खर्च का {p}', 'mr': 'खर्चाच्या {p}'},
+  'No ward has work billed under warranty.': {'hi': 'किसी वार्ड में वारंटी वाला भुगतान नहीं है।', 'mr': 'कोणत्याही वॉर्डमध्ये वॉरंटीतील बिल नाही.'},
+  'Could not load wards.': {'hi': 'वार्ड लोड नहीं हो सके।', 'mr': 'वॉर्ड लोड होऊ शकले नाहीत.'},
+  'No ward matches.': {'hi': 'कोई वार्ड नहीं मिला।', 'mr': 'एकही वॉर्ड जुळला नाही.'},
+  'Chosen': {'hi': 'चुना हुआ', 'mr': 'निवडलेला'},
+  'Could not load the report card.': {'hi': 'रिपोर्ट कार्ड लोड नहीं हो सका।', 'mr': 'रिपोर्ट कार्ड लोड होऊ शकले नाही.'},
 };
