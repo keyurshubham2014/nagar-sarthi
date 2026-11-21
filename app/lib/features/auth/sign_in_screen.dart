@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../core/i18n.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -71,7 +72,7 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
     final t = Theme.of(context).textTheme;
     final c = SaartheeColors.of(context);
     return Scaffold(
-      appBar: AppBar(title: const Text('Sign in')),
+      appBar: AppBar(title: Text(context.tr('Sign in'))),
       body: Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 420),
@@ -79,11 +80,13 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
             shrinkWrap: true,
             padding: const EdgeInsets.all(AppSpacing.s16),
             children: [
-              Text('Sign in with your mobile number', style: t.titleLarge),
+              Text(context.tr('Sign in with your mobile number'), style: t.titleLarge),
               const SizedBox(height: AppSpacing.s4),
               Text(
-                'The map stays open to everyone. Sign in to file a complaint or draft a notice. '
-                'This demo uses a fixed code instead of an SMS.',
+                context.tr(
+                  'The map stays open to everyone. Sign in to file a complaint or draft a notice. '
+                  'This demo uses a fixed code instead of an SMS.',
+                ),
                 style: t.bodyMedium?.copyWith(color: c.textSecondary),
               ),
               const SizedBox(height: AppSpacing.s16),
@@ -94,11 +97,11 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
                 inputFormatters: [FilteringTextInputFormatter.digitsOnly, LengthLimitingTextInputFormatter(10)],
                 autofillHints: const [AutofillHints.telephoneNumber],
                 decoration: InputDecoration(
-                  labelText: 'Mobile number',
-                  hintText: '10 digits',
+                  labelText: context.tr('Mobile number'),
+                  hintText: context.tr('10 digits'),
                   prefixIcon: const Icon(Icons.phone_outlined),
                   border: const OutlineInputBorder(),
-                  errorText: _fields['phone'] as String?,
+                  errorText: _fields['phone'] == null ? null : context.tr('${_fields['phone']}'),
                 ),
               ),
               const SizedBox(height: AppSpacing.s12),
@@ -109,15 +112,15 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
                 inputFormatters: [FilteringTextInputFormatter.digitsOnly, LengthLimitingTextInputFormatter(8)],
                 onSubmitted: (_) => _busy ? null : _submit(),
                 decoration: InputDecoration(
-                  labelText: 'Code',
+                  labelText: context.tr('Code'),
                   prefixIcon: const Icon(Icons.password),
                   border: const OutlineInputBorder(),
-                  errorText: _fields['code'] as String?,
+                  errorText: _fields['code'] == null ? null : context.tr('${_fields['code']}'),
                 ),
               ),
               if (_error != null) ...[
                 const SizedBox(height: AppSpacing.s8),
-                Text(_error!, style: t.bodyMedium?.copyWith(color: c.error)),
+                Text(context.tr(_error!), style: t.bodyMedium?.copyWith(color: c.error)),
               ],
               const SizedBox(height: AppSpacing.s16),
               FilledButton.icon(
@@ -125,10 +128,10 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
                 icon: _busy
                     ? const SizedBox.square(dimension: 16, child: CircularProgressIndicator(strokeWidth: 2))
                     : const Icon(Icons.login),
-                label: Text(_busy ? 'Signing in…' : 'Sign in'),
+                label: Text(context.tr(_busy ? 'Signing in…' : 'Sign in')),
               ),
               const SizedBox(height: AppSpacing.s24),
-              Text('Demo shortcuts (fill the fields)', style: t.labelLarge),
+              Text(context.tr('Demo shortcuts (fill the fields)'), style: t.labelLarge),
               const SizedBox(height: AppSpacing.s8),
               Wrap(
                 spacing: AppSpacing.s8,
@@ -137,7 +140,7 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
                   for (final e in roleLabels.entries)
                     OutlinedButton(
                       onPressed: _busy ? null : () => _fillDemo(e.key),
-                      child: Text('Demo: ${e.value}'),
+                      child: Text('Demo: ${context.tr(e.value)}'),
                     ),
                 ],
               ),
@@ -183,17 +186,17 @@ class RoleMenu extends ConsumerWidget {
       },
       itemBuilder: (_) => [
         if (s != null)
-          PopupMenuItem(enabled: false, child: Text('${roleLabels[s.role]} · ${s.phone}${s.ward == null ? '' : ' · Ward ${s.ward}'}')),
+          PopupMenuItem(enabled: false, child: Text('${context.tr(roleLabels[s.role]!)} · ${s.phone}${s.ward == null ? '' : ' · ${context.tr('Ward {w}', {'w': s.ward})}'}')),
         for (final e in roleLabels.entries)
-          if (s?.role != e.key) PopupMenuItem(value: e.key, child: Text('Demo: ${e.value}')),
-        PopupMenuItem(value: 'switch', child: Text(s == null ? 'Sign in with a number…' : 'Switch account…')),
-        if (s != null) const PopupMenuItem(value: 'out', child: Text('Sign out')),
+          if (s?.role != e.key) PopupMenuItem(value: e.key, child: Text('Demo: ${context.tr(e.value)}')),
+        PopupMenuItem(value: 'switch', child: Text(context.tr(s == null ? 'Sign in with a number…' : 'Switch account…'))),
+        if (s != null) PopupMenuItem(value: 'out', child: Text(context.tr('Sign out'))),
       ],
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: AppSpacing.s4),
         child: Chip(
           avatar: Icon(s == null ? Icons.login : Icons.person_outline, size: 18),
-          label: Text(s == null ? 'Sign in' : roleLabels[s.role] ?? s.role),
+          label: Text(context.tr(s == null ? 'Sign in' : roleLabels[s.role] ?? s.role)),
         ),
       ),
     );

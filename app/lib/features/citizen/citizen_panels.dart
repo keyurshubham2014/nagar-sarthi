@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../core/i18n.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/api/api_client.dart';
@@ -43,7 +44,7 @@ class CitizenHub extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     Widget tile(IconData icon, String title, String sub, VoidCallback onTap) => Card(
-      child: ListTile(leading: Icon(icon), title: Text(title), subtitle: Text(sub), trailing: const Icon(Icons.chevron_right), onTap: onTap),
+      child: ListTile(leading: Icon(icon), title: Text(context.tr(title)), subtitle: Text(context.tr(sub)), trailing: const Icon(Icons.chevron_right), onTap: onTap),
     );
     return PanelList(
       children: [
@@ -124,7 +125,7 @@ class _IntakePageState extends ConsumerState<IntakePage> {
   }
 
   Future<void> _file({String? matchedId}) async {
-    if (!await ensureRole(context, why: 'Sign in with your mobile number to file a complaint, so you can track it later.')) return;
+    if (!await ensureRole(context, why: context.tr('Sign in with your mobile number to file a complaint, so you can track it later.'))) return;
     if (!mounted) return;
     setState(() {
       _busy = true;
@@ -169,15 +170,15 @@ class _IntakePageState extends ConsumerState<IntakePage> {
           enabled: !_busy,
           onChanged: (_) => setState(() {}),
           decoration: InputDecoration(
-            labelText: 'Your complaint',
-            hintText: kIntakeHint,
+            labelText: context.tr('Your complaint'),
+            hintText: context.tr(kIntakeHint),
             hintMaxLines: 3,
             floatingLabelBehavior: FloatingLabelBehavior.always,
             border: const OutlineInputBorder(),
             errorText: _fields['description'],
           ),
         ),
-        Text('Try an example', style: t.labelMedium),
+        Text(context.tr('Try an example'), style: t.labelMedium),
         const SizedBox(height: AppSpacing.s4),
         Wrap(
           spacing: AppSpacing.s8,
@@ -203,7 +204,7 @@ class _IntakePageState extends ConsumerState<IntakePage> {
           icon: _busy && r == null
               ? const SizedBox.square(dimension: 18, child: CircularProgressIndicator(strokeWidth: 2))
               : const Icon(Icons.auto_awesome),
-          label: Text(_busy && r == null ? 'Understanding…' : kUnderstand),
+          label: Text(context.tr(_busy && r == null ? 'Understanding…' : kUnderstand)),
         ),
         if (_error != null) ...[
           const SizedBox(height: AppSpacing.s8),
@@ -211,10 +212,10 @@ class _IntakePageState extends ConsumerState<IntakePage> {
             color: c.errorTint,
             child: ListTile(
               leading: Icon(Icons.error_outline, color: c.error),
-              title: Text(_error!),
+              title: Text(context.tr(_error!)),
               trailing: TextButton(
                 onPressed: _busy ? null : (r == null ? _understand : _retryFile ?? () => setState(() => _error = null)),
-                child: Text(r == null || _retryFile != null ? 'Retry' : 'Dismiss'),
+                child: Text(context.tr(r == null || _retryFile != null ? 'Retry' : 'Dismiss')),
               ),
             ),
           ),
@@ -236,15 +237,15 @@ class _IntakePageState extends ConsumerState<IntakePage> {
     final filed = _filed;
 
     return [
-      const SectionTitle('What we understood'),
+      SectionTitle(context.tr('What we understood')),
       Align(
         alignment: Alignment.centerLeft,
-        child: Tag(live ? kUnderstoodLive : kUnderstoodRules,
+        child: Tag(context.tr(live ? kUnderstoodLive : kUnderstoodRules),
             bg: live ? c.successTint : c.warningTint, fg: live ? c.success : c.warning, icon: live ? Icons.auto_awesome : Icons.rule),
       ),
       const SizedBox(height: AppSpacing.s12),
       DropdownMenu<String>(
-        label: const Text('Language'),
+        label: Text(context.tr('Language')),
         expandedInsets: EdgeInsets.zero,
         initialSelection: _language,
         dropdownMenuEntries: [for (final e in complaintLanguages.entries) DropdownMenuEntry(value: e.key, label: e.value)],
@@ -252,11 +253,11 @@ class _IntakePageState extends ConsumerState<IntakePage> {
       ),
       const SizedBox(height: AppSpacing.s12),
       DropdownMenu<String>(
-        label: const Text('Category'),
+        label: Text(context.tr('Category')),
         expandedInsets: EdgeInsets.zero,
         initialSelection: _category,
         errorText: _fields['category'],
-        dropdownMenuEntries: [for (final k in complaintCategories) DropdownMenuEntry(value: k, label: k)],
+        dropdownMenuEntries: [for (final k in complaintCategories) DropdownMenuEntry(value: k, label: context.tr(k))],
         onSelected: (v) {
           setState(() => _category = v);
           _rematch();
@@ -266,12 +267,12 @@ class _IntakePageState extends ConsumerState<IntakePage> {
       if (_locality == null)
         Padding(
           padding: const EdgeInsets.only(bottom: AppSpacing.s4),
-          child: Text('We could not find the place in your text. Please pick your locality.', style: t.bodyMedium?.copyWith(color: c.warning)),
+          child: Text(context.tr('We could not find the place in your text. Please pick your locality.'), style: t.bodyMedium?.copyWith(color: c.warning)),
         ),
       DropdownMenu<String>(
         // Rebuilt once the gazetteer loads, so the resolved locality shows as selected.
         key: ValueKey('loc-${locs.length}'),
-        label: const Text('Locality (type to search)'),
+        label: Text(context.tr('Locality (type to search)')),
         expandedInsets: EdgeInsets.zero,
         enableFilter: true,
         requestFocusOnTap: true,
@@ -288,16 +289,16 @@ class _IntakePageState extends ConsumerState<IntakePage> {
         },
       ),
       if (_locality != null) ...[
-        SectionTitle(n == 0 ? 'Not reported here yet' : alreadyReported(n)),
+        SectionTitle(context.tr(n == 0 ? 'Not reported here yet' : alreadyReported(n), {'n': n})),
         if (_matchesLoading)
           const LinearProgressIndicator()
         else if (matches.isEmpty)
-          Text('No one has reported this in $_locality in the last 14 days of the data.', style: t.bodyMedium)
+          Text(context.tr('No one has reported this in {loc} in the last 14 days of the data.', {'loc': _locality}), style: t.bodyMedium)
         else ...[
           for (final m in matches) _MatchCard(m as Json),
-          if (n > matches.length) Text('Showing the latest ${matches.length} of $n.', style: t.bodySmall),
+          if (n > matches.length) Text(context.tr('Showing the latest {shown} of {n}.', {'shown': matches.length, 'n': n}), style: t.bodySmall),
           if (r['app_matches_unavailable'] == true)
-            Text('Complaints filed in this app could not be checked right now.', style: t.bodySmall?.copyWith(color: c.warning)),
+            Text(context.tr('Complaints filed in this app could not be checked right now.'), style: t.bodySmall?.copyWith(color: c.warning)),
         ],
       ],
       const SizedBox(height: AppSpacing.s16),
@@ -306,11 +307,11 @@ class _IntakePageState extends ConsumerState<IntakePage> {
           color: c.successTint,
           child: ListTile(
             leading: Icon(Icons.check_circle, color: c.success),
-            title: Text('Filed as ${filed['id']}'),
+            title: Text(context.tr('Filed as {id}', {'id': filed['id']})),
             subtitle: Text(filed['matched_complaint_id'] == null
-                ? 'A new complaint in ${filed['locality']}.'
-                : 'Your voice is added to ${filed['matched_complaint_id']}.'),
-            trailing: FilledButton(onPressed: () => pushComplaint(context, filed['id'] as String), child: const Text('Track')),
+                ? context.tr('A new complaint in {loc}.', {'loc': filed['locality']})
+                : context.tr('Your voice is added to {id}.', {'id': filed['matched_complaint_id']})),
+            trailing: FilledButton(onPressed: () => pushComplaint(context, filed['id'] as String), child: Text(context.tr('Track'))),
           ),
         )
       else
@@ -328,19 +329,19 @@ class _IntakePageState extends ConsumerState<IntakePage> {
                         matchedId: (matches.firstWhere((m) => m['source'] == 'dataset', orElse: () => matches.first))['id'] as String,
                       ),
                 icon: const Icon(Icons.group_add_outlined),
-                label: const Text(kAddMyVoice),
+                label: Text(context.tr(kAddMyVoice)),
               ),
             OutlinedButton.icon(
               onPressed: _busy || _locality == null || _category == null ? null : () => _file(),
               icon: const Icon(Icons.add),
-              label: const Text(kFileAsNew),
+              label: Text(context.tr(kFileAsNew)),
             ),
             if (_busy) const SizedBox.square(dimension: 24, child: CircularProgressIndicator(strokeWidth: 2)),
             if (_retryFile != null)
               Row(
                 children: [
                   Expanded(child: Text(_error ?? '', style: t.bodySmall?.copyWith(color: c.error))),
-                  TextButton(onPressed: _busy ? null : _retryFile, child: const Text('Retry')),
+                  TextButton(onPressed: _busy ? null : _retryFile, child: Text(context.tr('Retry'))),
                 ],
               ),
           ],
@@ -358,14 +359,14 @@ class _MatchCard extends StatelessWidget {
     final c = SaartheeColors.of(context);
     final wo = m['work_order_id'];
     final outcome = wo == null
-        ? (m['source'] == 'app' ? 'Filed in this app' : kNotYetFixed)
+        ? context.tr(m['source'] == 'app' ? 'Filed in this app' : kNotYetFixed)
         : '${_plain(m['contractor_name'])} · ${formatInr(m['cost_inr'] as num? ?? 0)} · '
-              '${m['sla_met'] == true ? 'on time' : 'late'} · ${m['reopened'] == true ? kFixFailed30.toLowerCase() : 'held'}';
+              '${context.tr(m['sla_met'] == true ? 'on time' : 'late')} · ${context.tr(m['reopened'] == true ? kFixFailed30.toLowerCase() : 'held')}';
     return Card(
       child: ListTile(
         dense: true,
         title: Text('${m['id']} · ${m['status']}'),
-        subtitle: Text('Received ${_day(m['received_at'])}${wo == null ? '' : ' · $wo'}\n$outcome',
+        subtitle: Text('${context.tr('Received {d}', {'d': _day(m['received_at'])})}${wo == null ? '' : ' · $wo'}\n$outcome',
             style: t.bodySmall?.copyWith(color: m['reopened'] == true ? c.error : null)),
         isThreeLine: true,
         trailing: const Icon(Icons.chevron_right),
@@ -405,7 +406,7 @@ class _TrackPageState extends ConsumerState<TrackPage> {
     final loc = _locality;
     return PanelList(
       children: [
-        const SectionTitle('By complaint id'),
+        SectionTitle(context.tr('By complaint id')),
         Row(
           children: [
             Expanded(
@@ -414,21 +415,21 @@ class _TrackPageState extends ConsumerState<TrackPage> {
                 textInputAction: TextInputAction.search,
                 onSubmitted: (_) => _go(),
                 onChanged: (_) => setState(() {}),
-                decoration: const InputDecoration(
-                  labelText: 'Complaint id',
+                decoration: InputDecoration(
+                  labelText: context.tr('Complaint id'),
                   hintText: 'BMC25-000123 or NS-000001',
-                  border: OutlineInputBorder(),
+                  border: const OutlineInputBorder(),
                 ),
               ),
             ),
             const SizedBox(width: AppSpacing.s8),
-            FilledButton(onPressed: _id.text.trim().isEmpty ? null : _go, child: const Text('Track')),
+            FilledButton(onPressed: _id.text.trim().isEmpty ? null : _go, child: Text(context.tr('Track'))),
           ],
         ),
-        const SectionTitle('By locality'),
+        SectionTitle(context.tr('By locality')),
         switch (locs) {
           AsyncData(:final value) => DropdownMenu<String>(
-            label: const Text('Locality (type to search)'),
+            label: Text(context.tr('Locality (type to search)')),
             expandedInsets: EdgeInsets.zero,
             enableFilter: true,
             requestFocusOnTap: true,
@@ -452,8 +453,8 @@ class _TrackPageState extends ConsumerState<TrackPage> {
                 const SizedBox(height: AppSpacing.s8),
                 Text(
                   (value['total'] as int) == 0
-                      ? 'No complaints recorded in $loc.'
-                      : '${value['total']} complaints in $loc, newest first${(value['total'] as int) > 50 ? ' (latest 50 shown)' : ''}',
+                      ? context.tr('No complaints recorded in {loc}.', {'loc': loc})
+                      : '${context.tr('{n} complaints in {loc}, newest first', {'n': value['total'], 'loc': loc})}${(value['total'] as int) > 50 ? context.tr(' (latest 50 shown)') : ''}',
                   style: t.bodyMedium,
                 ),
                 for (final m in value['rows'] as List) _MatchCard(m as Json),
@@ -496,51 +497,51 @@ class ComplaintDetail extends ConsumerWidget {
         const SizedBox(height: AppSpacing.s4),
         Text('“${d['description']}”', style: t.bodyMedium?.copyWith(fontStyle: FontStyle.italic)),
         const SizedBox(height: AppSpacing.s4),
-        Align(alignment: Alignment.centerLeft, child: Tag('Status: ${d['status']}', bg: c.infoTint, fg: c.info)),
-        const SectionTitle('What happened'),
-        _Step(icon: Icons.inbox_outlined, color: c.info, title: 'Received', sub: _day(d['received_at'])),
+        Align(alignment: Alignment.centerLeft, child: Tag(context.tr('Status: {s}', {'s': d['status']}), bg: c.infoTint, fg: c.info)),
+        SectionTitle(context.tr('What happened')),
+        _Step(icon: Icons.inbox_outlined, color: c.info, title: context.tr('Received'), sub: _day(d['received_at'])),
         if (wo == null) ...[
           if (matched != null)
             _Step(
               icon: Icons.group_add_outlined,
               color: c.info,
-              title: 'Added to complaint $matched',
-              sub: 'Follow that complaint for the repair.',
-              action: TextButton(onPressed: () => pushComplaint(context, matched), child: const Text('Track it')),
+              title: context.tr('Added to complaint {id}', {'id': matched}),
+              sub: context.tr('Follow that complaint for the repair.'),
+              action: TextButton(onPressed: () => pushComplaint(context, matched), child: Text(context.tr('Track it'))),
             ),
           _Step(
             icon: Icons.hourglass_empty,
             color: c.warning,
-            title: open ? kNotYetFixed : 'No work order linked',
-            sub: open ? 'No repair has been ordered for this complaint yet.' : 'Closed as: ${d['status']}',
+            title: context.tr(open ? kNotYetFixed : 'No work order linked'),
+            sub: open ? context.tr('No repair has been ordered for this complaint yet.') : context.tr('Closed as: {s}', {'s': d['status']}),
             last: true,
           ),
         ] else ...[
           _Step(
             icon: Icons.assignment_outlined,
             color: c.info,
-            title: 'Linked to work order ${wo['id']}',
-            sub: 'Assigned ${_day(wo['assigned_at'])} · ${wo['method']}\n'
+            title: context.tr('Linked to work order {id}', {'id': wo['id']}),
+            sub: '${context.tr('Assigned {d}', {'d': _day(wo['assigned_at'])})} · ${wo['method']}\n'
                 '${_plain(wo['contractor_name'])} · ${formatInr(wo['cost_inr'] as num? ?? 0)}',
           ),
           _Step(
             icon: wo['sla_met'] == true ? Icons.check_circle_outline : Icons.schedule,
             color: wo['sla_met'] == true ? c.success : c.warning,
-            title: 'Completed ${_day(wo['completed_at'])}',
-            sub: wo['sla_met'] == true ? 'On time against the SLA' : 'Late against the SLA',
+            title: context.tr('Completed {d}', {'d': _day(wo['completed_at'])}),
+            sub: context.tr(wo['sla_met'] == true ? 'On time against the SLA' : 'Late against the SLA'),
           ),
           _Step(
             icon: wo['reopened'] == true ? Icons.report_problem_outlined : Icons.verified_outlined,
             color: wo['reopened'] == true ? c.error : c.success,
-            title: wo['reopened'] == true ? kFixFailed30 : kFixHeld,
-            sub: wo['reopened'] == true ? '$kNeedsReview: the same spot was reported again.' : 'No repeat complaint within 30 days.',
+            title: context.tr(wo['reopened'] == true ? kFixFailed30 : kFixHeld),
+            sub: context.tr(wo['reopened'] == true ? '$kNeedsReview: the same spot was reported again.' : 'No repeat complaint within 30 days.'),
             last: true,
           ),
           const SizedBox(height: AppSpacing.s8),
           OutlinedButton.icon(
             onPressed: () => _push(context, '${wo['road_name']}', RoadPanel(wo['road_id'] as String)),
             icon: const Icon(Icons.alt_route),
-            label: Text('Open road: ${wo['road_name']}'),
+            label: Text(context.tr('Open road: {r}', {'r': wo['road_name']})),
           ),
         ],
       ],
@@ -600,7 +601,7 @@ class WardPicker extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) => switch (ref.watch(mapDataProvider)) {
     AsyncData(:final value) => DropdownMenu<String>(
-      label: const Text('Ward (type to search)'),
+      label: Text(context.tr('Ward (type to search)')),
       expandedInsets: EdgeInsets.zero,
       enableFilter: true,
       requestFocusOnTap: true,
@@ -632,8 +633,8 @@ class _AskWardPageState extends State<AskWardPage> {
     return PanelList(
       children: [
         WardPicker(selected: ward, onSelected: (v) => setState(() => _ward = v)),
-        const SectionTitle('What would you like to ask about?'),
-        if (ward == null) const Text('Pick your ward first.'),
+        SectionTitle(context.tr('What would you like to ask about?')),
+        if (ward == null) Text(context.tr('Pick your ward first.')),
         for (final e in questionTopics.entries)
           Padding(
             padding: const EdgeInsets.only(bottom: AppSpacing.s8),
@@ -642,13 +643,14 @@ class _AskWardPageState extends State<AskWardPage> {
                   ? null
                   : () => showClaudeDraftSheet(
                       context,
-                      title: 'Question to Ward $ward',
+                      title: context.tr('Question to Ward {w}', {'w': ward}),
                       feature: 'question',
-                      body: {'ward_code': ward, 'topic': e.key},
+                      // Drafted in the app's language; the sheet can still switch.
+                      body: {'ward_code': ward, 'topic': e.key, 'language': context.lang},
                       languages: briefLanguages,
-                      textLabel: 'Your question (editable)',
+                      textLabel: context.tr('Your question (editable)'),
                     ),
-              child: Text(e.value),
+              child: Text(context.tr(e.value)),
             ),
           ),
       ],

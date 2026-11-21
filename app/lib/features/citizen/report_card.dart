@@ -1,4 +1,5 @@
 import 'dart:ui' as ui;
+import '../../core/i18n.dart';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -30,7 +31,7 @@ class _ReportCardPageState extends State<ReportCardPage> {
       children: [
         WardPicker(selected: ward, onSelected: (v) => setState(() => _ward = v)),
         const SizedBox(height: AppSpacing.s12),
-        if (ward == null) const Text('Pick a ward to see its report card.') else _CardLoader(ward, key: ValueKey(ward)),
+        if (ward == null) Text(context.tr('Pick a ward to see its report card.')) else _CardLoader(ward, key: ValueKey(ward)),
       ],
     );
   }
@@ -88,7 +89,7 @@ class _CardLoaderState extends ConsumerState<_CardLoader> {
             ref.invalidate(wardDetailProvider(code));
             ref.invalidate(nextRupeeProvider(code));
           },
-          child: const Text('Retry'),
+          child: Text(context.tr('Retry')),
         ),
       );
     }
@@ -104,7 +105,7 @@ class _CardLoaderState extends ConsumerState<_CardLoader> {
           icon: _sharing
               ? const SizedBox.square(dimension: 18, child: CircularProgressIndicator(strokeWidth: 2))
               : Icon(kIsWeb ? Icons.download : Icons.share),
-          label: Text(kIsWeb ? 'Download image' : 'Share image'),
+          label: Text(context.tr(kIsWeb ? 'Download image' : 'Share image')),
         ),
         if (_shareError != null) Text(_shareError!, style: TextStyle(color: SaartheeColors.of(context).error)),
       ],
@@ -152,12 +153,12 @@ class WardReportCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('WARD REPORT CARD · ROAD REPAIRS 2025', style: TextStyle(color: accent, fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: 1)),
+            Text(context.tr('WARD REPORT CARD · ROAD REPAIRS 2025'), style: const TextStyle(color: accent, fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: 1)),
             const SizedBox(height: 4),
-            Text('Ward ${ward['code']}', style: big.copyWith(fontSize: 26)),
+            Text(context.tr('Ward {w}', {'w': ward['code']}), style: big.copyWith(fontSize: 26)),
             Text('${ward['name']}', style: label.copyWith(fontSize: 14)),
             const SizedBox(height: 16),
-            Text('Spent ${formatInr(spend)} of ${formatInr(budget)} budget', style: const TextStyle(fontWeight: FontWeight.w600)),
+            Text(context.tr('Spent {spend} of {budget} budget', {'spend': formatInr(spend), 'budget': formatInr(budget)}), style: const TextStyle(fontWeight: FontWeight.w600)),
             const SizedBox(height: 6),
             LinearProgressIndicator(
               value: budget <= 0 ? 1 : (spend / budget).clamp(0, 1).toDouble(),
@@ -166,28 +167,28 @@ class WardReportCard extends StatelessWidget {
               color: spend > budget ? warn : accent,
               backgroundColor: const Color(0xFFE8EAED),
             ),
-            if (spend > budget) Text('${formatInr(spend - budget)} over budget', style: label.copyWith(color: warn)),
+            if (spend > budget) Text(context.tr('{amount} over budget', {'amount': formatInr(spend - budget)}), style: label.copyWith(color: warn)),
             const SizedBox(height: 16),
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                stat(formatInr(ward['flagged_inr'] as num? ?? 0), 'to be reviewed'),
-                stat(jobs == 0 ? '—' : formatPercent(failed / jobs), 'of repairs failed\nwithin 30 days', color: warn),
-                stat('$neverFixed', 'open issues\nnever fixed'),
+                stat(formatInr(ward['flagged_inr'] as num? ?? 0), context.tr('to be reviewed')),
+                stat(jobs == 0 ? '—' : formatPercent(failed / jobs), context.tr('of repairs failed\nwithin 30 days'), color: warn),
+                stat('$neverFixed', context.tr('open issues\nnever fixed')),
               ],
             ),
             const SizedBox(height: 16),
-            const Text('Next rupee should go to', style: label),
+            Text(context.tr('Next rupee should go to'), style: label),
             Text(
               top == null
-                  ? 'No items listed'
+                  ? context.tr('No items listed')
                   : '${top['issue']['category']}, ${top['issue']['locality']} · ${formatInr(top['est_cost_inr'] as num? ?? 0)}',
               style: const TextStyle(fontWeight: FontWeight.w600),
             ),
             const Divider(height: 24),
             Row(
               children: [
-                Expanded(child: Text(disclaimer, style: label.copyWith(fontSize: 10))),
+                Expanded(child: Text(context.tr(disclaimer), style: label.copyWith(fontSize: 10))),
                 const SizedBox(width: 8),
                 const Text('Nagar Sarthi', style: TextStyle(color: accent, fontWeight: FontWeight.w800)),
               ],

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../core/i18n.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/map/civic_map.dart';
@@ -120,9 +121,14 @@ class _MapHomeScreenState extends ConsumerState<MapHomeScreen> with WidgetsBindi
             tooltip: 'More',
             onSelected: (v) {
               if (v == 'notice') showDataNotice(context, disclaimer);
+              if (appLanguages.containsKey(v)) ref.read(langProvider.notifier).set(v);
             },
-            itemBuilder: (_) => const [
-              PopupMenuItem(value: 'notice', child: Text('About this data')),
+            itemBuilder: (_) => [
+              PopupMenuItem(enabled: false, child: Text(context.tr('Language'))),
+              for (final e in appLanguages.entries)
+                CheckedPopupMenuItem(value: e.key, checked: context.lang == e.key, child: Text(e.value)),
+              const PopupMenuDivider(),
+              PopupMenuItem(value: 'notice', child: Text(context.tr('About this data'))),
             ],
           ),
         ],
@@ -154,7 +160,7 @@ class _MapHomeScreenState extends ConsumerState<MapHomeScreen> with WidgetsBindi
                     Padding(
                       padding: const EdgeInsets.only(right: AppSpacing.s8),
                       child: FilterChip(
-                        label: Text(l.label),
+                        label: Text(context.tr(l.label)),
                         selected: visible.contains(l.id),
                         onSelected: (on) {
                           ref.read(visibleLayersProvider.notifier).set(l.id, on);
@@ -207,7 +213,7 @@ class _MapHomeScreenState extends ConsumerState<MapHomeScreen> with WidgetsBindi
                       heroTag: 'citizen',
                       onPressed: () => openCitizenHub(context),
                       icon: const Icon(Icons.campaign_outlined),
-                      label: const Text(kCitizenAction),
+                      label: Text(context.tr(kCitizenAction)),
                     ),
                     if (data != null && legendLayers.any((l) => l.legend.isNotEmpty))
                       _Legend(
@@ -244,7 +250,7 @@ class _MapHomeScreenState extends ConsumerState<MapHomeScreen> with WidgetsBindi
                 const SizedBox(height: AppSpacing.s8),
                 _Banner(
                   icon: Icons.info_outline,
-                  text: disclaimer,
+                  text: context.tr(disclaimer),
                   bg: c.infoTint,
                   fg: c.info,
                   onTap: () => showDataNotice(context, disclaimer),

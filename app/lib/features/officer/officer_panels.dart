@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../core/i18n.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/auth/session.dart';
@@ -452,9 +453,9 @@ class WarrantyHeroCard extends ConsumerWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(heroLine(formatInr(inr)), style: t.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
+                    Text(context.tr(heroLine('{amount}'), {'amount': formatInr(inr)}), style: t.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
                     const SizedBox(height: 2),
-                    Text('${dlp['count'] ?? 0} jobs across Mumbai · tap to see wards', style: t.bodySmall),
+                    Text(context.tr('{n} jobs across Mumbai · tap to see wards', {'n': dlp['count'] ?? 0}), style: t.bodySmall),
                   ],
                 ),
               ),

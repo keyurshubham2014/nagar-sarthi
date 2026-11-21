@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../core/i18n.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/flag_strings.dart';
@@ -114,7 +115,7 @@ class _Header extends ConsumerWidget {
             const SizedBox(width: AppSpacing.s12),
           Expanded(
             child: Text(
-              page.title,
+              context.tr(page.title),
               style: Theme.of(context).textTheme.titleMedium,
               maxLines: 2,
               overflow: TextOverflow.ellipsis,

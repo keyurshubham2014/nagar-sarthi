@@ -1,4 +1,5 @@
 import 'dart:async';
+import '../../core/i18n.dart';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
@@ -289,7 +290,7 @@ class MonsoonBar extends ConsumerWidget {
                     spacing: AppSpacing.s8,
                     crossAxisAlignment: WrapCrossAlignment.center,
                     children: [
-                      Text(s == null ? kMonsoonPlay : season.dateLabel(day), style: t.titleSmall),
+                      Text(s == null ? context.tr(kMonsoonPlay) : season.dateLabel(day), style: t.titleSmall),
                       if (s != null) ...[
                         Text(rainText, style: t.bodySmall),
                         if (alert != null) _AlertChip(alert),

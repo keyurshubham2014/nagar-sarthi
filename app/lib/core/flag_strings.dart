@@ -164,7 +164,8 @@ const String kFileAsNew = 'File as new';
 const String kNotYetFixed = 'Not yet fixed — no work order linked';
 const String kFixFailed30 = 'Repair failed within 30 days';
 const String kFixHeld = 'Held: not re-opened within 30 days';
-String alreadyReported(int n) => n == 1 ? 'Already reported: 1 neighbour raised this' : 'Already reported: $n neighbours raised this';
+/// A template: fill {n} (see core/i18n.dart `tr`).
+String alreadyReported(int n) => n == 1 ? 'Already reported: 1 neighbour raised this' : 'Already reported: {n} neighbours raised this';
 
 /// Intake examples, phrased like real complaints in the data, at places with recent complaints.
 const List<(String, String)> intakeExamples = [

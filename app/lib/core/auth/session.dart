@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../i18n.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -62,11 +63,11 @@ Future<bool> ensureRole(BuildContext context, {Set<String>? roles, required Stri
     context: context,
     builder: (c) => AlertDialog(
       icon: const Icon(Icons.lock_outline),
-      title: Text(signedIn ? 'Not available for your role' : 'Please sign in'),
+      title: Text(c.tr(signedIn ? 'Not available for your role' : 'Please sign in')),
       content: Text(why),
       actions: [
-        TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Not now')),
-        FilledButton(onPressed: () => Navigator.pop(c, true), child: Text(signedIn ? 'Switch account' : 'Sign in')),
+        TextButton(onPressed: () => Navigator.pop(c, false), child: Text(c.tr('Not now'))),
+        FilledButton(onPressed: () => Navigator.pop(c, true), child: Text(c.tr(signedIn ? 'Switch account' : 'Sign in'))),
       ],
     ),
   );
