@@ -7,6 +7,7 @@ import 'package:go_router/go_router.dart';
 import '../../core/api/api_client.dart';
 import '../../core/auth/session.dart';
 import '../../core/theme/tokens.dart';
+import '../../core/widgets/saarthee.dart';
 
 /// Phone + demo code sign-in. Pops `true` on success.
 class SignInScreen extends ConsumerStatefulWidget {
@@ -71,13 +72,13 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
     final t = Theme.of(context).textTheme;
     final c = SaartheeColors.of(context);
     return Scaffold(
-      appBar: AppBar(title: Text(context.tr('Sign in'))),
-      body: Center(
+      appBar: SaartheeAppBar(title: context.tr('Sign in')),
+      body: Align(
+        alignment: Alignment.topCenter,
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 420),
           child: ListView(
-            shrinkWrap: true,
-            padding: const EdgeInsets.all(AppSpacing.s16),
+            padding: const EdgeInsets.fromLTRB(AppSpacing.gutter, AppSpacing.s24, AppSpacing.gutter, AppSpacing.s24),
             children: [
               Text(context.tr('Sign in with your mobile number'), style: t.titleLarge),
               const SizedBox(height: AppSpacing.s4),

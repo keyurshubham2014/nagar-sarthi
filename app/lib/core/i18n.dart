@@ -279,7 +279,7 @@ const Map<String, Map<String, String>> _strings = {
   },
   'Ward {w} this monsoon': {'hi': 'इस मानसून में वार्ड {w}', 'mr': 'या पावसाळ्यात वॉर्ड {w}'},
   'of the budget spent': {'hi': 'बजट खर्च हुआ', 'mr': 'बजेट खर्च झाले'},
-  'to review': {'hi': 'की जांच बाकी', 'mr': 'ची तपासणी बाकी'},
+  'to review': {'hi': 'जांच बाकी', 'mr': 'तपासणी बाकी'},
   'repairs failed within 30 days': {'hi': 'मरम्मतें 30 दिनों में टूटीं', 'mr': 'दुरुस्त्या 30 दिवसांत निकामी'},
   'Watch the 2025 monsoon': {'hi': '2025 का मानसून देखें', 'mr': '2025 चा पावसाळा पाहा'},
   'June to October on the map: complaints, repairs and repairs that failed.': {
