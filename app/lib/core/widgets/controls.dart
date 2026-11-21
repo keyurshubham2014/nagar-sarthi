@@ -135,6 +135,14 @@ class _Button extends StatelessWidget {
   }
 }
 
+/// Three pulsing dots (chat typing state); secondary text colour by default.
+class DotPulse extends StatelessWidget {
+  const DotPulse({super.key, this.color});
+  final Color? color;
+  @override
+  Widget build(BuildContext context) => _DotPulse(color: color ?? SaartheeColors.of(context).textSecondary);
+}
+
 /// Three dots pulsing in turn (loading state of buttons and chat).
 class _DotPulse extends StatefulWidget {
   const _DotPulse({required this.color});

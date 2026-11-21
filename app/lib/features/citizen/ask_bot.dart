@@ -6,12 +6,10 @@ import '../../core/api/api_client.dart';
 import '../../core/format.dart';
 import '../../core/i18n.dart';
 import '../../core/prefs.dart';
-import '../../core/theme/tokens.dart';
-import '../../core/widgets/saarthee.dart';
+import '../../core/widgets/ui.dart';
 import '../officer/officer_panels.dart';
-import '../officer/panel.dart';
 import '../trail/trail_screen.dart';
-import 'citizen_panels.dart';
+import 'citizen_panels.dart' hide TimelineStep;
 
 const String kAskBot = 'Ask about a complaint';
 void openAskBot() => appRouter.push('/ask');
@@ -68,92 +66,98 @@ class _AskBotPageState extends ConsumerState<AskBotPage> {
   }
 
   void _toEnd() => WidgetsBinding.instance.addPostFrameCallback((_) {
-    if (_scroll.hasClients) _scroll.animateTo(_scroll.position.maxScrollExtent, duration: const Duration(milliseconds: 250), curve: Curves.easeOut);
+    if (_scroll.hasClients) {
+      _scroll.animateTo(_scroll.position.maxScrollExtent, duration: AppMotion.of(context, AppMotion.standard), curve: AppMotion.standardCurve);
+    }
   });
 
   @override
   Widget build(BuildContext context) {
     final c = SaartheeColors.of(context);
-    final t = Theme.of(context).textTheme;
+    final t = context.type;
     final chips = ['BMC25-006359', context.tr('Why is my road still broken?'), context.tr('How much was spent on my road?')];
-    return SafeArea(
-      top: false,
-      child: ContentWidth(
-        padded: false,
-        child: Column(
-          children: [
-            Expanded(
-              child: ListView(
-                controller: _scroll,
-                padding: const EdgeInsets.fromLTRB(AppSpacing.gutter, AppSpacing.s16, AppSpacing.gutter, AppSpacing.s16),
-                children: [
-                  _Bubble(
-                    mine: false,
-                    child: Text(context.tr('Namaste! Send your complaint id (like BMC25-001234 or NS-000012) or ask a question, and I will tell you what happened to it.'), style: t.bodyMedium),
-                  ),
-                  for (final m in _msgs) _message(context, m),
-                  if (_busy)
-                    _Bubble(
-                      mine: false,
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const SizedBox.square(dimension: 16, child: CircularProgressIndicator(strokeWidth: 2)),
-                          const SizedBox(width: AppSpacing.s8),
-                          Flexible(child: Text(context.tr('Looking it up…'), style: t.bodyMedium)),
-                        ],
-                      ),
-                    ),
-                ],
-              ),
-            ),
-            DecoratedBox(
-              decoration: BoxDecoration(
-                color: c.surface,
-                border: Border(top: BorderSide(color: c.border)),
-              ),
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(AppSpacing.gutter, AppSpacing.s8, AppSpacing.s8, AppSpacing.s8),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    SingleChildScrollView(
-                      scrollDirection: Axis.horizontal,
-                      child: Row(
-                        children: [
-                          for (final q in chips)
-                            Padding(
-                              padding: const EdgeInsets.only(right: AppSpacing.s8),
-                              child: ActionChip(label: Text(q), onPressed: _busy ? null : () => _send(q)),
-                            ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: AppSpacing.s4),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: TextField(
-                            controller: _text,
-                            enabled: !_busy,
-                            maxLength: 500,
-                            minLines: 1,
-                            maxLines: 3,
-                            textInputAction: TextInputAction.send,
-                            onSubmitted: _send,
-                            onChanged: (_) => setState(() {}),
-                            decoration: InputDecoration(hintText: context.tr('Type a complaint id or a question'), counterText: '', border: const OutlineInputBorder(), isDense: true),
+    final canSend = !_busy && _text.text.trim().isNotEmpty;
+    return Scaffold(
+      backgroundColor: c.background,
+      appBar: TopBar(title: context.tr(kAskBot)),
+      body: SafeArea(
+        top: false,
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: AppSpacing.maxContent),
+            child: Column(
+              children: [
+                Expanded(
+                  child: ListView(
+                    controller: _scroll,
+                    padding: const EdgeInsets.fromLTRB(AppSpacing.gutter, AppSpacing.s16, AppSpacing.gutter, AppSpacing.s16),
+                    children: [
+                      _Answer(child: Text(context.tr('Namaste! Send your complaint id (like BMC25-001234 or NS-000012) or ask a question, and I will tell you what happened to it.'), style: t.body)),
+                      for (final (i, m) in _msgs.indexed)
+                        StaggeredEntrance(key: ValueKey(i), index: 0, child: _message(context, m)),
+                      if (_busy)
+                        _Answer(
+                          child: Semantics(
+                            label: context.tr('Looking it up…'),
+                            child: const Padding(padding: EdgeInsets.symmetric(vertical: AppSpacing.s8), child: Align(alignment: AlignmentDirectional.centerStart, child: DotPulse())),
                           ),
                         ),
-                        const SizedBox(width: AppSpacing.s4),
-                        IconButton.filled(tooltip: context.tr('Send'), onPressed: _busy || _text.text.trim().isEmpty ? null : () => _send(_text.text), icon: const Icon(Icons.send)),
-                      ],
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
-              ),
+                FilterChipRow(
+                  children: [for (final q in chips) FilterPill(label: q, selected: false, onTap: _busy ? null : () => _send(q))],
+                ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(AppSpacing.gutter, AppSpacing.s4, AppSpacing.gutter, AppSpacing.s12),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          controller: _text,
+                          enabled: !_busy,
+                          maxLength: 500,
+                          minLines: 1,
+                          maxLines: 4,
+                          textInputAction: TextInputAction.send,
+                          onSubmitted: _send,
+                          onChanged: (_) => setState(() {}),
+                          style: t.body,
+                          decoration: InputDecoration(
+                            hintText: context.tr('Type a complaint id or a question'),
+                            counterText: '',
+                            isDense: true,
+                            contentPadding: const EdgeInsets.symmetric(horizontal: AppSpacing.s20, vertical: AppSpacing.s14),
+                            border: const OutlineInputBorder(borderRadius: AppRadii.pillRadius, borderSide: BorderSide.none),
+                            enabledBorder: const OutlineInputBorder(borderRadius: AppRadii.pillRadius, borderSide: BorderSide.none),
+                            disabledBorder: const OutlineInputBorder(borderRadius: AppRadii.pillRadius, borderSide: BorderSide.none),
+                            focusedBorder: OutlineInputBorder(
+                              borderRadius: AppRadii.pillRadius,
+                              borderSide: BorderSide(color: c.primary, width: AppSpacing.focusWidth),
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: AppSpacing.s8),
+                      Pressable(
+                        onTap: canSend ? () => _send(_text.text) : null,
+                        circle: true,
+                        haptic: true,
+                        semanticLabel: context.tr('Send'),
+                        color: canSend ? c.primary : c.surfacePressed,
+                        pressedColor: c.primaryDark,
+                        child: SizedBox.square(
+                          dimension: AppSpacing.touchTarget,
+                          child: Icon(Icons.arrow_upward, color: canSend ? c.onPrimary : c.textDisabled),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ),
-          ],
+          ),
         ),
       ),
     );
@@ -161,91 +165,116 @@ class _AskBotPageState extends ConsumerState<AskBotPage> {
 
   Widget _message(BuildContext context, _Msg m) {
     final c = SaartheeColors.of(context);
-    final t = Theme.of(context).textTheme;
-    if (m.mine) return _Bubble(mine: true, child: Text(m.text, style: t.bodyMedium));
-    if (m.error) {
-      return _Bubble(
-        mine: false,
-        child: Text(context.tr('Could not get an answer. {e}', {'e': m.text}), style: t.bodyMedium?.copyWith(color: c.error)),
+    final t = context.type;
+    if (m.mine) {
+      return Align(
+        alignment: AlignmentDirectional.centerEnd,
+        child: ConstrainedBox(
+          constraints: BoxConstraints(maxWidth: MediaQuery.sizeOf(context).width * 0.78),
+          child: Container(
+            margin: const EdgeInsets.only(bottom: AppSpacing.s16, left: AppSpacing.s40),
+            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.s16, vertical: AppSpacing.s12),
+            decoration: BoxDecoration(color: c.primary, borderRadius: AppRadii.cardRadius),
+            child: Text(m.text, style: t.body.copyWith(color: c.onPrimary)),
+          ),
+        ),
       );
+    }
+    if (m.error) {
+      return _Answer(child: Text(context.tr('Could not get an answer. {e}', {'e': m.text}), style: t.body.copyWith(color: c.error)));
     }
     final r = m.reply ?? const {};
     final live = r['source'] == 'live';
-    return _Bubble(
-      mine: false,
+    final facts = _facts(context, r);
+    return _Answer(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(m.text, style: t.bodyMedium),
+          Text(m.text, style: t.body),
           const SizedBox(height: AppSpacing.s8),
-          Tag(
-            context.tr(live ? 'Answered live by Claude' : 'Saved answer'),
-            bg: live ? c.successTint : c.warningTint,
-            fg: live ? c.success : c.warning,
-            icon: live ? Icons.auto_awesome : Icons.description_outlined,
-          ),
-          ..._facts(context, r),
+          StatusChip(context.tr(live ? 'Answered live by Claude' : 'Saved answer'), tone: live ? StatusTone.success : StatusTone.neutral, dot: true),
+          if (facts.isNotEmpty) ...[
+            const SizedBox(height: AppSpacing.s12),
+            ClipRRect(
+              borderRadius: AppRadii.tileRadius,
+              child: ColoredBox(
+                color: c.surfaceAlt,
+                child: Column(
+                  children: [
+                    for (final (i, f) in facts.indexed) ...[
+                      if (i > 0) Divider(height: 1, thickness: 1, indent: AppSpacing.s16, color: c.background),
+                      f,
+                    ],
+                  ],
+                ),
+              ),
+            ),
+          ],
         ],
       ),
     );
   }
 
-  /// The facts behind the answer as small tappable cards.
-  List<Widget> _facts(BuildContext context, Map<String, dynamic> r) {
-    final cards = <Widget>[
-      if (r['complaint_id'] case final String id when r['kind'] == 'complaint')
-        _FactCard(icon: Icons.inbox_outlined, title: context.tr('Complaint {id}', {'id': id}), onTap: () => pushComplaint(context, id)),
-      if (r['matched_complaint_id'] case final String id) _FactCard(icon: Icons.group_add_outlined, title: context.tr('Complaint {id}', {'id': id}), onTap: () => pushComplaint(context, id)),
-      if (r['work_order_id'] case final String wo)
-        _FactCard(
-          icon: Icons.assignment_outlined,
-          title: context.tr('Work order {id}', {'id': wo}),
-          sub: [
-            if (r['cost_inr'] is num) formatInr(r['cost_inr'] as num),
-            if (r['road_name'] != null) '${r['road_name']}',
-            if (r['link'] == 'inferred') context.tr(kInferredLink),
-            if (r['under_warranty'] == true) context.tr('Under warranty'),
-          ].join(' · '),
-          onTap: r['road_id'] == null ? null : () => openRoad(r['road_id'] as String, wo: wo),
-        ),
-      if (r['issue_id'] case final String issue)
-        _FactCard(icon: Icons.account_tree_outlined, title: context.tr('Issue {id}', {'id': issue}), sub: context.tr(outcomeLabels[r['outcome']] ?? ''), onTap: () => openIssue(issue)),
-      if (r['kind'] == 'ward' && r['ward_code'] is String)
-        _FactCard(icon: Icons.account_tree_outlined, title: context.tr('Complaint trail · Ward {w}', {'w': r['ward_code']}), onTap: () => openTrail(r['ward_code'] as String)),
-      if (r['kind'] == 'not_found') _FactCard(icon: Icons.timeline, title: context.tr('Track a complaint'), onTap: () => appRouter.push('/track')),
-    ];
-    return [if (cards.isNotEmpty) const SizedBox(height: AppSpacing.s8), ...cards];
-  }
+  /// The facts behind the answer as compact tappable rows.
+  List<Widget> _facts(BuildContext context, Map<String, dynamic> r) => [
+    if (r['complaint_id'] case final String id when r['kind'] == 'complaint')
+      _Fact(icon: Icons.inbox_outlined, title: context.tr('Complaint {id}', {'id': id}), onTap: () => pushComplaint(context, id)),
+    if (r['matched_complaint_id'] case final String id)
+      _Fact(icon: Icons.group_add_outlined, title: context.tr('Complaint {id}', {'id': id}), onTap: () => pushComplaint(context, id)),
+    if (r['work_order_id'] case final String wo)
+      _Fact(
+        icon: Icons.assignment_outlined,
+        title: context.tr('Work order {id}', {'id': wo}),
+        sub: [
+          if (r['cost_inr'] is num) formatInr(r['cost_inr'] as num),
+          if (r['road_name'] != null) '${r['road_name']}',
+          if (r['link'] == 'inferred') context.tr(kInferredLink),
+          if (r['under_warranty'] == true) context.tr('Under warranty'),
+        ].join(' · '),
+        onTap: r['road_id'] == null ? null : () => openRoad(r['road_id'] as String, wo: wo),
+      ),
+    if (r['issue_id'] case final String issue)
+      _Fact(icon: Icons.account_tree_outlined, title: context.tr('Issue {id}', {'id': issue}), sub: context.tr(outcomeLabels[r['outcome']] ?? ''), onTap: () => openIssue(issue)),
+    if (r['kind'] == 'ward' && r['ward_code'] is String)
+      _Fact(icon: Icons.route_outlined, title: context.tr('Complaint trail · Ward {w}', {'w': r['ward_code']}), onTap: () => openTrail(r['ward_code'] as String)),
+    if (r['kind'] == 'not_found') _Fact(icon: Icons.manage_search, title: context.tr('Track a complaint'), onTap: () => appRouter.push('/track')),
+  ];
 }
 
-class _Bubble extends StatelessWidget {
-  const _Bubble({required this.mine, required this.child});
-  final bool mine;
+/// An answer: plain text on white, left, after a small round "N" mark.
+class _Answer extends StatelessWidget {
+  const _Answer({required this.child});
   final Widget child;
   @override
   Widget build(BuildContext context) {
     final c = SaartheeColors.of(context);
-    return Align(
-      alignment: mine ? Alignment.centerRight : Alignment.centerLeft,
-      child: ConstrainedBox(
-        constraints: BoxConstraints(maxWidth: mine ? 280 : 520),
-        child: Container(
-          margin: const EdgeInsets.only(bottom: AppSpacing.s12),
-          padding: const EdgeInsets.all(AppSpacing.s12),
-          decoration: BoxDecoration(
-            color: mine ? c.primaryContainer : c.surface,
-            border: mine ? null : Border.all(color: c.border),
-            borderRadius: AppRadii.cardRadius,
+    final t = context.type;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: AppSpacing.s20, right: AppSpacing.s16),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          ExcludeSemantics(
+            child: Container(
+              width: 28,
+              height: 28,
+              margin: const EdgeInsets.only(top: 2),
+              alignment: Alignment.center,
+              decoration: BoxDecoration(color: c.primary, shape: BoxShape.circle),
+              child: Text('N', style: t.label.copyWith(color: c.onPrimary, fontWeight: FontWeight.w700)),
+            ),
           ),
-          child: child,
-        ),
+          const SizedBox(width: AppSpacing.s12),
+          Expanded(child: child),
+        ],
       ),
     );
   }
 }
 
-class _FactCard extends StatelessWidget {
-  const _FactCard({required this.icon, required this.title, this.sub, this.onTap});
+/// One compact fact row inside the grey group under an answer.
+class _Fact extends StatelessWidget {
+  const _Fact({required this.icon, required this.title, this.sub, this.onTap});
   final IconData icon;
   final String title;
   final String? sub;
@@ -253,37 +282,31 @@ class _FactCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = SaartheeColors.of(context);
-    final t = Theme.of(context).textTheme;
-    return Padding(
-      padding: const EdgeInsets.only(top: AppSpacing.s4),
-      child: Material(
-        color: c.surfaceAlt,
-        borderRadius: AppRadii.controlRadius,
-        clipBehavior: Clip.antiAlias,
-        child: InkWell(
-          onTap: onTap,
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(minHeight: AppSpacing.touchTarget),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.s8, vertical: AppSpacing.s4),
-              child: Row(
-                children: [
-                  Icon(icon, size: 20, color: c.primary),
-                  const SizedBox(width: AppSpacing.s8),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(title, style: t.labelLarge),
-                        if (sub != null && sub!.isNotEmpty) Text(sub!, style: t.bodySmall?.copyWith(color: c.textSecondary)),
-                      ],
-                    ),
-                  ),
-                  if (onTap != null) Icon(Icons.chevron_right, color: c.textSecondary),
-                ],
+    final t = context.type;
+    return Pressable(
+      onTap: onTap,
+      scale: false,
+      pressedColor: c.surfacePressed,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(minHeight: AppSpacing.touchTarget + AppSpacing.s8),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.s16, vertical: AppSpacing.s8),
+          child: Row(
+            children: [
+              Icon(icon, size: AppSpacing.iconSmall, color: c.textPrimary),
+              const SizedBox(width: AppSpacing.s12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(title, style: t.label),
+                    if (sub != null && sub!.isNotEmpty) Text(sub!, style: t.caption),
+                  ],
+                ),
               ),
-            ),
+              if (onTap != null) Icon(Icons.chevron_right, color: c.textSecondary, size: AppSpacing.iconSize),
+            ],
           ),
         ),
       ),

@@ -4,7 +4,6 @@ import 'package:go_router/go_router.dart';
 
 import 'core/auth/session.dart';
 import 'core/dev/gallery.dart';
-import 'core/flag_strings.dart';
 import 'features/about/about_screen.dart';
 import 'features/audit/audit_screen.dart';
 import 'features/auth/sign_in_screen.dart';
@@ -66,10 +65,10 @@ final appRouter = GoRouter(
     GoRoute(
       path: '/complaint',
       redirect: (_, s) => _q(s, 'id') == null ? '/' : null,
-      builder: (_, s) => DetailPage(title: 'Complaint ${_q(s, 'id')}', body: ComplaintDetail(_q(s, 'id')!)),
+      builder: (_, s) => ComplaintDetail(_q(s, 'id')!),
     ),
-    GoRoute(path: '/ask', builder: (_, _) => const DetailPage(title: kAskBot, body: AskBotPage())),
-    GoRoute(path: '/track', builder: (_, _) => const DetailPage(title: kTrackComplaint, body: TrackPage())),
+    GoRoute(path: '/ask', builder: (_, _) => const AskBotPage()),
+    GoRoute(path: '/track', builder: (_, _) => const TrackPage()),
     GoRoute(
       path: '/next-rupee',
       redirect: (_, s) => _q(s, 'ward') == null ? '/' : null,
