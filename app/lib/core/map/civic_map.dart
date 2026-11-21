@@ -27,6 +27,7 @@ class CivicMap extends StatelessWidget {
     this.muted = true,
     this.mapController,
     this.onTilesFailed,
+    this.onTileLoaded,
   });
 
   final String semanticLabel;
@@ -38,6 +39,9 @@ class CivicMap extends StatelessWidget {
 
   /// Called on each tile load error; the caller decides how to show it.
   final VoidCallback? onTilesFailed;
+
+  /// Called with the load time whenever a tile has loaded without error.
+  final ValueChanged<DateTime>? onTileLoaded;
 
   /// Desaturates and lightens raster tiles so data colours stand out.
   static const ColorFilter mutedFilter = ColorFilter.matrix(<double>[
@@ -71,10 +75,11 @@ class CivicMap extends StatelessWidget {
               urlTemplate: kMapTileUrl,
               userAgentPackageName: 'in.nagarsarthi.nagar_sarthi',
               errorTileCallback: (_, _, _) => onTilesFailed?.call(),
-              tileBuilder: muted
-                  ? (context, tile, _) =>
-                        ColorFiltered(colorFilter: mutedFilter, child: tile)
-                  : null,
+              tileBuilder: (context, tile, image) {
+                final at = image.loadFinishedAt;
+                if (at != null && !image.loadError) onTileLoaded?.call(at);
+                return muted ? ColorFiltered(colorFilter: mutedFilter, child: tile) : tile;
+              },
             ),
             ...layers,
             const SimpleAttributionWidget(

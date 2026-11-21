@@ -82,7 +82,12 @@ class ApiClient {
   Future<List<dynamic>> contractors() => _get('/api/contractors');
   Future<Map<String, dynamic>> nextRupee(String ward) =>
       _get('/api/next-rupee/${Uri.encodeComponent(ward)}');
+  /// Compact per day: {d, rain, alert, tide, n, c:[[lat,lon]], r:[road_id], x:[road_id]}.
   Future<List<dynamic>> timeline() => _get('/api/timeline');
+
+  /// Open and repeat complaints clustered: [{lat, lon, count, open, sample[]}]; [ward] scopes it.
+  Future<List<dynamic>> complaintsHeat({String? ward}) =>
+      _call(() => _dio.get<List<dynamic>>('/api/complaints/heat', queryParameters: {'ward': ?ward}));
 
   /// Fair scorecards, alphabetical; [ward] scopes them to one ward.
   Future<Map<String, dynamic>> scorecards({String? ward}) =>

@@ -1,14 +1,17 @@
 import express from 'express';
 import cors from 'cors';
+import compression from 'compression';
 import { config, anthropicKey } from './config.js';
 import { audit } from './audit.js';
 import { dbStatus } from './db.js';
 import { relay } from './claude.js';
 import { scorecards, contractorWorkOrders } from './scorecards.js';
 import { errorHandler, notFound } from './errors.js';
+import { compactTimeline, complaintsHeat } from './timeline.js';
 
 const app = express();
 app.use(cors());
+app.use(compression());
 app.use(express.json({ limit: '1mb' }));
 
 // Request log: method, path, status, time. No bodies, so no personal data.
@@ -108,7 +111,16 @@ app.get('/api/flags', (req, res) => {
   );
 });
 
-app.get('/api/timeline', (_req, res) => res.json(audit.timeline));
+// Compact per-day shape for the monsoon slider (see timeline.js), built once.
+const timeline = compactTimeline(audit);
+app.get('/api/timeline', (_req, res) => res.json(timeline));
+
+// Open and repeat complaints clustered on a ~1 km grid; ?ward=CODE scopes to one ward.
+app.get('/api/complaints/heat', (req, res) => {
+  const ward = typeof req.query.ward === 'string' && req.query.ward ? req.query.ward : undefined;
+  if (ward) lookup(audit.wards, ward, `Ward '${ward}'`);
+  res.json(complaintsHeat(audit, ward));
+});
 
 app.post('/api/claude/:feature', async (req, res) => {
   res.json(await relay(req.params.feature, req.body ?? {}, audit));

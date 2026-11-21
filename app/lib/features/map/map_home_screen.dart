@@ -11,6 +11,7 @@ import '../officer/panel.dart';
 import 'map_data.dart';
 import 'map_layers.dart';
 import 'map_sheets.dart';
+import 'monsoon.dart';
 
 /// Money map home (REQ-F-016). Tap handling is injectable: later tasks pass
 /// [onWardTap] / [onRoadTap] (or replace the default sheets in map_sheets.dart).
@@ -25,15 +26,28 @@ class MapHomeScreen extends ConsumerStatefulWidget {
 }
 
 class _MapHomeScreenState extends ConsumerState<MapHomeScreen> {
-  bool _tilesFailed = false;
+  // When tiles last failed; cleared by a tile that loads later. A notifier, so only the banner rebuilds.
+  final ValueNotifier<DateTime?> _tilesFailedAt = ValueNotifier(null);
   bool? _legendOpen; // null: open on wide screens, collapsed on phones
 
+  // Tile events arrive mid-frame; defer the change.
+  void _later(VoidCallback f) => WidgetsBinding.instance.addPostFrameCallback((_) {
+    if (mounted) f();
+  });
+
   void _onTilesFailed() {
-    if (_tilesFailed || !mounted) return;
-    // Tile errors arrive mid-frame; defer the rebuild.
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) setState(() => _tilesFailed = true);
-    });
+    if (_tilesFailedAt.value == null) _later(() => _tilesFailedAt.value = DateTime.now());
+  }
+
+  void _onTileLoaded(DateTime at) {
+    final failed = _tilesFailedAt.value;
+    if (failed != null && at.isAfter(failed)) _later(() => _tilesFailedAt.value = null);
+  }
+
+  @override
+  void dispose() {
+    _tilesFailedAt.dispose();
+    super.dispose();
   }
 
   @override
@@ -45,7 +59,13 @@ class _MapHomeScreenState extends ConsumerState<MapHomeScreen> {
     final visible = ref.watch(visibleLayersProvider);
     final legendOpen = _legendOpen ?? MediaQuery.sizeOf(context).width >= 600;
     final wide = MediaQuery.sizeOf(context).width >= kSidePanelBreakpoint;
-    final active = [for (final l in mapLayers) if (visible.contains(l.id)) l];
+    // Only flips on enter/exit; per-day ticks rebuild the monsoon widgets alone.
+    final monsoonOn = ref.watch(monsoonProvider.select((s) => s != null));
+    final active = [
+      for (final l in mapLayers)
+        if (visible.contains(l.id) && !(monsoonOn && l.id == 'roads')) l,
+    ];
+    final legendLayers = [...active, if (monsoonOn) monsoonLegend];
 
     final layerCtx = data == null
         ? null
@@ -86,7 +106,11 @@ class _MapHomeScreenState extends ConsumerState<MapHomeScreen> {
             child: CivicMap(
               semanticLabel: 'Map of Mumbai wards and repaired roads',
               onTilesFailed: _onTilesFailed,
-              layers: [if (layerCtx != null) for (final l in active) l.build(layerCtx)],
+              onTileLoaded: _onTileLoaded,
+              layers: [
+                if (layerCtx != null) for (final l in active) l.build(layerCtx),
+                if (monsoonOn) ...const [MonsoonRainWash(), MonsoonRoadLayer(), MonsoonDotLayer()],
+              ],
             ),
           ),
           // Layer toggle chips: one per entry in mapLayers.
@@ -146,24 +170,39 @@ class _MapHomeScreenState extends ConsumerState<MapHomeScreen> {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                if (data != null && active.any((l) => l.legend.isNotEmpty))
+                if (data != null && legendLayers.any((l) => l.legend.isNotEmpty))
                   Align(
                     alignment: Alignment.bottomRight,
                     child: _Legend(
-                      layers: active,
+                      layers: legendLayers,
                       open: legendOpen,
                       onToggle: () => setState(() => _legendOpen = !legendOpen),
                     ),
                   ),
-                if (_tilesFailed) ...[
+                if (data != null) ...[
                   const SizedBox(height: AppSpacing.s8),
-                  _Banner(
-                    icon: Icons.cloud_off_outlined,
-                    text: 'Map tiles could not load. Ward and road shapes are still shown.',
-                    bg: c.warningTint,
-                    fg: c.warning,
+                  Align(
+                    alignment: Alignment.bottomLeft,
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 560),
+                      child: MonsoonBar(wide: wide),
+                    ),
                   ),
                 ],
+                ValueListenableBuilder(
+                  valueListenable: _tilesFailedAt,
+                  builder: (context, failedAt, _) => failedAt == null
+                      ? const SizedBox.shrink()
+                      : Padding(
+                          padding: const EdgeInsets.only(top: AppSpacing.s8),
+                          child: _Banner(
+                            icon: Icons.cloud_off_outlined,
+                            text: 'Map tiles could not load. Ward and road shapes are still shown.',
+                            bg: c.warningTint,
+                            fg: c.warning,
+                          ),
+                        ),
+                ),
                 const SizedBox(height: AppSpacing.s8),
                 _Banner(
                   icon: Icons.info_outline,

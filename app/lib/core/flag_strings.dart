@@ -128,3 +128,22 @@ const Map<String, ({String title, String what, String better, String listed, Str
 
 /// Ward brief languages: code -> name in its own script.
 const Map<String, String> briefLanguages = {'en': 'English', 'hi': 'हिंदी', 'mr': 'मराठी'};
+
+// Play the monsoon (TASK-04). Neutral: what happened, not who is to blame.
+const String kMonsoonPlay = 'Play the 2025 monsoon';
+const String kMonsoonNoRain = 'No rainfall data';
+const String kMonsoonExit = 'Exit';
+const String kMonsoonComplaints = 'complaints';
+const String kMonsoonRepairs = 'repairs';
+const String kMonsoonFailed = 'failed within 30 days';
+const String kMonsoonPaidAgain = 'roads paid for more than once';
+const String kMonsoonNotYet = 'Not repaired yet this season';
+const String kMonsoonRecent = 'Repaired in the last 7 days';
+const String kRepairedAgain = 'Repaired again';
+const String kMonsoonDots = 'New complaint (fades over 5 days)';
+const String kMonsoonRainTint = 'Blue wash: Orange or Red rain alert';
+
+// Complaints heat layer.
+const String kHeatOpen = 'open';
+const String kRepairReopened = 'repair re-opened';
+const String kHeatRepeat = 'Open or repeat complaints (repair re-opened)';

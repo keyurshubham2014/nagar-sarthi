@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/flag_strings.dart';
 import '../../core/format.dart';
 import '../officer/next_rupee.dart';
+import 'complaints_heat.dart';
 import 'map_data.dart';
 
 /// What a layer builder gets: the loaded data and the tap callbacks.
@@ -103,6 +104,18 @@ final List<MapLayerDef> mapLayers = [
     defaultOn: false,
     legend: nextRupeeLegend,
     build: (_) => const NextRupeeLayer(),
+  ),
+  MapLayerDef(
+    id: 'complaints',
+    label: 'Complaints',
+    legendTitle: kHeatRepeat,
+    defaultOn: false,
+    legend: [
+      LegendEntry('Under ${heatSteps[0]}', heatColors[0]),
+      LegendEntry('${heatSteps[0]}–${heatSteps[1] - 1}', heatColors[1]),
+      LegendEntry('${heatSteps[1]}+', heatColors[2]),
+    ],
+    build: (_) => const ComplaintsHeatLayer(),
   ),
 ];
 
