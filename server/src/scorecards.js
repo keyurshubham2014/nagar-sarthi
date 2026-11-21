@@ -60,6 +60,24 @@ export function scorecards(audit, ward) {
   return { ward: ward ?? null, min_jobs: audit.meta.thresholds.min_jobs_per_ward, contractors: rows };
 }
 
+/** One contractor's scorecard in every ward it worked in, by ward code; below the minimum jobs it is not rated. */
+export function contractorWards(audit, id) {
+  if (!Object.hasOwn(audit.contractors, id)) throw notFound(`Contractor '${id}'`);
+  const c = audit.contractors[id];
+  const wards = Object.entries(c.by_ward)
+    .map(([code, s]) => ({
+      code,
+      name: audit.wards[code]?.name ?? code,
+      jobs: s.jobs,
+      spend: audit.wards[code]?.by_contractor.find((b) => b.contractor_id === id)?.inr ?? null,
+      rated: s.rated,
+      reason_if_not_rated: s.reason_if_not_rated,
+      measures: s.rated ? measures(audit, s.metrics, c, code, s.jobs) : null,
+    }))
+    .sort((a, b) => a.code.localeCompare(b.code));
+  return { id, name: c.name, min_jobs: audit.meta.thresholds.min_jobs_per_ward, wards };
+}
+
 let overRatio;
 /** The work orders behind one measure: late, re-opened or above-rate jobs. */
 export function contractorWorkOrders(audit, id, metric, ward) {

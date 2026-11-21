@@ -5,7 +5,7 @@ import { config, anthropicKey } from './config.js';
 import { audit } from './audit.js';
 import { dbStatus } from './db.js';
 import { relay } from './claude.js';
-import { scorecards, contractorWorkOrders } from './scorecards.js';
+import { scorecards, contractorWards, contractorWorkOrders } from './scorecards.js';
 import { errorHandler, notFound, badRequest } from './errors.js';
 import { login, seedUsers, session, needUser, needRole } from './auth.js';
 import { compactTimeline, complaintsHeat } from './timeline.js';
@@ -58,6 +58,10 @@ app.get('/api/wards', (_req, res) => {
       flagged_share: w.flagged_share,
       dlp_paid_inr: w.by_flag_type?.dlp_paid?.inr ?? 0,
       dlp_paid_count: w.by_flag_type?.dlp_paid?.count ?? 0,
+      // Same source as the ward detail (by_flag_type), so the map card, ward page and list agree.
+      fix_failed_count: w.by_flag_type?.fix_failed?.count ?? 0,
+      fix_failed_inr: w.by_flag_type?.fix_failed?.inr ?? 0,
+      jobs: w.by_contractor.reduce((s, c) => s + c.jobs, 0),
       centroid_lat: w.centroid_lat,
       centroid_lon: w.centroid_lon,
     })),
@@ -101,6 +105,9 @@ app.get('/api/contractors', (_req, res) => {
 app.get('/api/scorecards', (req, res) => {
   res.json(scorecards(audit, typeof req.query.ward === 'string' ? req.query.ward : undefined));
 });
+
+// One contractor ward by ward (every ward it worked in): jobs, spend, rated or why not, the three measures.
+app.get('/api/contractors/:id/wards', (req, res) => res.json(contractorWards(audit, req.params.id)));
 
 // Work orders behind one scorecard measure: ?metric=speed|durability|pricing[&ward=CODE], max 100 rows + total.
 app.get('/api/contractors/:id/work-orders', (req, res) => {
