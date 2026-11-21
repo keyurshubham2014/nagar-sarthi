@@ -63,7 +63,7 @@ String heroLine(String amount) => '$amount billed on roads under warranty — to
 
 const String kUnderWarranty = 'Under warranty';
 const String kWarrantyClaimTag = 'Under warranty: claim from contractor, ₹0 to ward';
-const String kBudgetEnds = 'Budget ends here';
+const String kBudgetEnds = 'Funding stops here';
 const String kNextRupeeAction = 'Where should the next rupee go?';
 
 /// Next-rupee score parts, in display order.

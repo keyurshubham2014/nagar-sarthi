@@ -51,7 +51,7 @@ void _openSpot(WidgetRef ref, String ward, List<Json> items) {
   if (items.length == 1) return _openItem(ref, ward, items.single);
   pushPanel(PanelPage(
     '${items.length} items at this spot · Ward $ward',
-    PanelList(children: [for (final i in items) _ItemRow(item: i, onTap: () => _openItem(ref, ward, i))]),
+    PanelList(children: [for (final i in items) _ItemRow(item: i, funded: i['funded'] == true, onTap: () => _openItem(ref, ward, i))]),
   ));
 }
 
@@ -150,7 +150,7 @@ class NextRupeeLayer extends ConsumerWidget {
   }
 }
 
-/// Funded items, then a "budget ends here" divider, then the rest.
+/// Ranked list with a budget what-if: change the budget, and the funding line moves live.
 class NextRupeeList extends ConsumerWidget {
   const NextRupeeList(this.ward, {super.key});
   final String ward;
@@ -160,34 +160,203 @@ class NextRupeeList extends ConsumerWidget {
     ref.watch(nextRupeeProvider(ward)),
     onRetry: () => ref.invalidate(nextRupeeProvider(ward)),
     data: (nr) {
-      final c = SaartheeColors.of(context);
-      final t = Theme.of(context).textTheme;
-      final items = [for (final i in (nr['items'] as List? ?? const [])) i as Json];
+      final items = [for (final i in (nr['items'] as List? ?? const [])) i as Json]
+        ..sort((a, b) => (a['rank'] as num).compareTo(b['rank'] as num));
       if (items.isEmpty) return const PanelMessage.empty('No open issues waiting for repair in this ward.');
-      final funded = items.where((i) => i['funded'] == true).toList();
-      final rest = items.where((i) => i['funded'] != true).toList();
-      Widget row(Json i) => _ItemRow(item: i, onTap: () => _openItem(ref, ward, i));
-      return PanelList(
-        children: [
-          Text('Budget left: ${formatInr(nr['remaining_budget'] as num? ?? 0)}', style: t.titleMedium),
-          const SizedBox(height: AppSpacing.s8),
-          OutlinedButton.icon(
-            onPressed: () => showNextRupeeOnMap(ref, ward),
-            icon: const Icon(Icons.map_outlined),
-            label: const Text('Show the pins on the map'),
+      return _Planner(ward: ward, items: items, base: nr['remaining_budget'] as num? ?? 0);
+    },
+  );
+}
+
+double _cost(Json i) => (i['cost_to_ward_inr'] as num? ?? 0).toDouble();
+bool _warranty(Json i) => i['claim_under_dlp'] == true;
+
+/// The engine's rule (engine/audit.py): walk the items by rank, adding each one's cost to the ward;
+/// the list stops at the first item that busts the budget. Warranty items cost the ward ₹0 and are always funded.
+List<bool> fundedFor(List<Json> items, num budget) {
+  var spent = 0.0;
+  var over = false;
+  return [
+    for (final i in items)
+      () {
+        spent += _cost(i);
+        over = over || spent > budget + 0.005;
+        return _warranty(i) || !over;
+      }(),
+  ];
+}
+
+class _Planner extends ConsumerStatefulWidget {
+  const _Planner({required this.ward, required this.items, required this.base});
+  final String ward;
+  final List<Json> items;
+  final num base;
+  @override
+  ConsumerState<_Planner> createState() => _PlannerState();
+}
+
+class _PlannerState extends ConsumerState<_Planner> {
+  late double _budget = widget.base.toDouble();
+  final _typed = TextEditingController();
+  late final List<bool> _baseFunded = fundedFor(widget.items, widget.base);
+
+  @override
+  void initState() {
+    super.initState();
+    // Self-check: at the current budget the client rule must match the engine's own funded flags.
+    assert(() {
+      for (final (k, i) in widget.items.indexed) {
+        if (_baseFunded[k] != (i['funded'] == true)) throw StateError('next-rupee rule differs from the engine at rank ${i['rank']}');
+      }
+      return true;
+    }());
+  }
+
+  @override
+  void dispose() {
+    _typed.dispose();
+    super.dispose();
+  }
+
+  void _set(double v) => setState(() => _budget = v < 0 ? 0 : v);
+
+  // Quick amounts: percentages of the budget left, or fixed steps when nothing is left.
+  List<(String, double)> get _quick {
+    final b = widget.base.toDouble();
+    if (b <= 0) return [('Current ₹0', 0), ('+₹1 L', 1e5), ('+₹2.5 L', 2.5e5), ('+₹5 L', 5e5)];
+    return [('−25%', b * 0.75), ('Current', b), ('+25%', b * 1.25), ('+50%', b * 1.5)];
+  }
+
+  String _near(Iterable<Json> xs) {
+    final h = xs.where((i) => (i['reasons'] as List? ?? const []).any((r) => '$r'.startsWith('Near hospital'))).length;
+    final s = xs.where((i) => (i['reasons'] as List? ?? const []).any((r) => '$r'.startsWith('Near school'))).length;
+    final parts = [if (h > 0) '$h near a hospital', if (s > 0) '$s near a school'];
+    return parts.isEmpty ? '' : ', including ${parts.join(' and ')}';
+  }
+
+  /// One line: what the change from the current budget buys or drops.
+  String _summary(List<bool> funded) {
+    final items = widget.items;
+    final delta = _budget - widget.base;
+    if (delta.abs() < 1) return 'This is the budget left now.';
+    final added = [for (final (k, i) in items.indexed) if (funded[k] && !_baseFunded[k]) i];
+    final dropped = [for (final (k, i) in items.indexed) if (!funded[k] && _baseFunded[k]) i];
+    final d = '${delta > 0 ? '+' : '−'}${formatInr(delta.abs())}';
+    if (added.isNotEmpty) return '$d funds ${added.length} more ${added.length == 1 ? 'item' : 'items'}${_near(added)}.';
+    if (dropped.isNotEmpty) return '$d drops ${dropped.length} ${dropped.length == 1 ? 'item' : 'items'}${_near(dropped)}.';
+    final next = funded.indexOf(false);
+    if (next < 0) return '$d changes nothing: every item is already funded.';
+    final needed = items.take(next + 1).fold<double>(0, (s, i) => s + _cost(i)) - _budget;
+    return '$d funds no more items: the next one needs ${formatInr(needed)} more.';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final c = SaartheeColors.of(context);
+    final t = Theme.of(context).textTheme;
+    final items = widget.items;
+    final funded = fundedFor(items, _budget);
+    final used = [for (final (k, i) in items.indexed) if (funded[k]) _cost(i)].fold<double>(0, (s, v) => s + v);
+    final total = items.fold<double>(0, (s, i) => s + _cost(i));
+    // Slider reaches twice the budget left or the whole list's cost, whichever is more, in whole lakh.
+    final max = (([widget.base * 2, total, 1e5].reduce((a, b) => a > b ? a : b)) / 1e5).ceil() * 1e5;
+    final cut = funded.indexOf(false); // first item below the funding line (-1: all funded)
+    final changed = (_budget - widget.base).abs() >= 1;
+    Widget row(int k) => _ItemRow(
+      item: items[k],
+      funded: funded[k],
+      onTap: () => _openItem(ref, widget.ward, {...items[k], 'funded': funded[k]}),
+    );
+
+    return PanelList(
+      children: [
+        Text('Budget left now: ${formatInr(widget.base)}', style: t.titleMedium),
+        const SizedBox(height: AppSpacing.s8),
+        OutlinedButton.icon(
+          onPressed: () => showNextRupeeOnMap(ref, widget.ward),
+          icon: const Icon(Icons.map_outlined),
+          label: const Text('Show the pins on the map'),
+        ),
+        const SectionTitle('What if the budget changes?'),
+        Container(
+          padding: const EdgeInsets.all(AppSpacing.s16),
+          decoration: AppElevation.cardDecoration(c),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                children: [
+                  Expanded(child: Text(formatInr(_budget), style: t.headlineSmall)),
+                  if (changed)
+                    TextButton.icon(
+                      onPressed: () {
+                        _typed.clear();
+                        _set(widget.base.toDouble());
+                      },
+                      icon: const Icon(Icons.restart_alt),
+                      label: const Text('Reset'),
+                    ),
+                ],
+              ),
+              Slider(
+                value: _budget.clamp(0, max).toDouble(),
+                max: max.toDouble(),
+                divisions: (max / 5000).round(),
+                label: formatInr(_budget),
+                semanticFormatterCallback: (v) => formatInr(v),
+                onChanged: (v) {
+                  _typed.clear();
+                  _set(v);
+                },
+              ),
+              Wrap(
+                spacing: AppSpacing.s8,
+                runSpacing: AppSpacing.s4,
+                children: [
+                  for (final (label, v) in _quick)
+                    ChoiceChip(
+                      label: Text(label),
+                      selected: (_budget - v).abs() < 1,
+                      onSelected: (_) {
+                        _typed.clear();
+                        _set(v);
+                      },
+                    ),
+                ],
+              ),
+              const SizedBox(height: AppSpacing.s12),
+              TextField(
+                controller: _typed,
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                textInputAction: TextInputAction.done,
+                decoration: const InputDecoration(labelText: 'Type an amount', suffixText: 'lakh ₹', hintText: 'e.g. 7.5'),
+                onChanged: (s) {
+                  final v = double.tryParse(s.trim());
+                  if (v != null) _set(v * 1e5);
+                },
+              ),
+              const SizedBox(height: AppSpacing.s12),
+              Text(
+                '${funded.where((f) => f).length} of ${items.length} items funded · ${formatInr(used)} used · ${formatInr(_budget - used)} left',
+                style: t.titleSmall,
+              ),
+              const SizedBox(height: AppSpacing.s4),
+              Text(_summary(funded), style: t.bodyMedium?.copyWith(color: changed ? c.primary : c.textSecondary)),
+            ],
           ),
-          const SizedBox(height: AppSpacing.s8),
-          Text('Ranked by need: severity, nearby hospitals and schools, accidents, flooding and traffic.',
-              style: t.bodySmall?.copyWith(color: c.textSecondary)),
-          const SizedBox(height: AppSpacing.s8),
-          if (funded.isEmpty)
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: AppSpacing.s8),
-              child: Text('No budget remains in this ward, so nothing below can be funded yet.',
-                  style: t.bodyMedium?.copyWith(color: c.warning)),
-            ),
-          ...funded.map(row),
-          if (rest.isNotEmpty) ...[
+        ),
+        const SizedBox(height: AppSpacing.s8),
+        Text('Ranked by need: severity, nearby hospitals and schools, accidents, flooding and traffic. '
+            'The ranks never change with the budget; only the funding line moves. Tap an item for its score.',
+            style: t.bodySmall?.copyWith(color: c.textSecondary)),
+        const SizedBox(height: AppSpacing.s8),
+        if (cut == 0)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: AppSpacing.s8),
+            child: Text('At this budget nothing can be funded yet, except work under warranty.', style: t.bodyMedium?.copyWith(color: c.warning)),
+          ),
+        for (var k = 0; k < items.length; k++) ...[
+          if (k == cut)
             Padding(
               padding: const EdgeInsets.symmetric(vertical: AppSpacing.s8),
               child: Row(
@@ -201,18 +370,18 @@ class NextRupeeList extends ConsumerWidget {
                 ],
               ),
             ),
-            ...rest.map(row),
-          ],
+          row(k),
         ],
-      );
-    },
-  );
+      ],
+    );
+  }
 }
 
 class _ItemRow extends StatelessWidget {
-  const _ItemRow({required this.item, required this.onTap});
+  const _ItemRow({required this.item, required this.onTap, required this.funded});
   final Json item;
   final VoidCallback onTap;
+  final bool funded;
   @override
   Widget build(BuildContext context) {
     final c = SaartheeColors.of(context);
@@ -222,7 +391,7 @@ class _ItemRow extends StatelessWidget {
       onTap: onTap,
       leading: CircleAvatar(
         radius: 16,
-        backgroundColor: item['funded'] == true ? kFundedPin : kUnfundedPin,
+        backgroundColor: funded ? kFundedPin : kUnfundedPin,
         child: Text('${item['rank']}', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800)),
       ),
       title: Text('${issue['category']} · ${issue['locality']}'),
