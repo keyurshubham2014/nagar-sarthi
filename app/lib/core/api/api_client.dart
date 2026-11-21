@@ -128,6 +128,9 @@ class ApiClient {
   Future<Map<String, dynamic>> scorecards({String? ward}) =>
       _call(() => _dio.get('/api/scorecards', queryParameters: {'ward': ?ward}));
 
+  /// One contractor in every ward it worked in: {min_jobs, wards[{code, name, jobs, spend, rated, reason_if_not_rated, measures}]}.
+  Future<Map<String, dynamic>> contractorWards(String id) => _get('/api/contractors/${Uri.encodeComponent(id)}/wards');
+
   /// Work orders behind one measure (`speed`, `durability`, `pricing`): up to 100 rows and `total`.
   Future<Map<String, dynamic>> contractorWorkOrders(String id, String metric, {String? ward}) => _call(
     () => _dio.get(
