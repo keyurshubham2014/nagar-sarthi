@@ -1,4 +1,4 @@
-import 'package:flutter/widgets.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -27,6 +27,11 @@ final rootNavigatorKey = GlobalKey<NavigatorState>();
 
 String? _q(GoRouterState s, String key) => s.uri.queryParameters[key];
 
+/// Pages above the tabs are MaterialPages so they get the theme's slide-and-fade (320 ms in, 220 ms out).
+/// With plain `builder:` go_router built NoTransitionPage here, so pushes and pops were instant.
+Page<void> _page(GoRouterState s, Widget child) =>
+    MaterialPage<void>(key: s.pageKey, name: s.name ?? s.path, arguments: s.extra, restorationId: s.pageKey.value, child: child);
+
 /// Routes. Five tabs in a stateful shell (each keeps its state); detail pages
 /// sit above the tabs on the root navigator, so back returns to the tab.
 ///   /  /map  /act (Report or Audit by role)  /contractors  /my-ward
@@ -47,58 +52,61 @@ final appRouter = GoRouter(
       ],
     ),
     // Hidden dev page: every token and component (not linked from the app).
-    GoRoute(path: '/dev/gallery', builder: (_, _) => const GalleryScreen()),
-    GoRoute(path: '/sign-in', builder: (_, _) => const SignInScreen()),
-    GoRoute(path: '/about', builder: (_, _) => const AboutScreen()),
-    GoRoute(path: '/wards', builder: (_, _) => const WardComparisonScreen()),
+    GoRoute(path: '/dev/gallery', pageBuilder: (_, s) => _page(s, const GalleryScreen())),
+    GoRoute(path: '/sign-in', pageBuilder: (_, s) => _page(s, const SignInScreen())),
+    GoRoute(path: '/about', pageBuilder: (_, s) => _page(s, const AboutScreen())),
+    GoRoute(path: '/wards', pageBuilder: (_, s) => _page(s, const WardComparisonScreen())),
     GoRoute(
       path: '/ward',
       redirect: (_, s) => _q(s, 'code') == null ? '/' : null,
-      builder: (_, s) => _WardPage(_q(s, 'code')!),
+      pageBuilder: (_, s) => _page(s, _WardPage(_q(s, 'code')!)),
     ),
     GoRoute(
       path: '/road',
       redirect: (_, s) => _q(s, 'id') == null ? '/' : null,
-      builder: (_, s) => _RoadPage(_q(s, 'id')!, wo: _q(s, 'wo')),
+      pageBuilder: (_, s) => _page(s, _RoadPage(_q(s, 'id')!, wo: _q(s, 'wo'))),
     ),
     GoRoute(
       path: '/contractor',
       redirect: (_, s) => _q(s, 'id') == null ? '/' : null,
-      builder: (_, s) => ContractorPage(id: _q(s, 'id')!, ward: _q(s, 'ward')),
+      pageBuilder: (_, s) => _page(s, ContractorPage(id: _q(s, 'id')!, ward: _q(s, 'ward'))),
     ),
     GoRoute(
       path: '/complaint',
       redirect: (_, s) => _q(s, 'id') == null ? '/' : null,
-      builder: (_, s) => ComplaintDetail(_q(s, 'id')!),
+      pageBuilder: (_, s) => _page(s, ComplaintDetail(_q(s, 'id')!)),
     ),
-    GoRoute(path: '/ask', builder: (_, _) => const AskBotPage()),
-    GoRoute(path: '/track', builder: (_, _) => const TrackPage()),
+    GoRoute(path: '/ask', pageBuilder: (_, s) => _page(s, const AskBotPage())),
+    GoRoute(path: '/track', pageBuilder: (_, s) => _page(s, const TrackPage())),
     GoRoute(
       path: '/next-rupee',
       redirect: (_, s) => _q(s, 'ward') == null ? '/' : null,
-      builder: (c, s) => DetailPage(
-        title: '${c.tr('Next rupee')} · ${c.tr('Ward {w}', {'w': _q(s, 'ward')})}',
-        heading: false,
-        body: NextRupeeList(_q(s, 'ward')!),
+      pageBuilder: (c, s) => _page(
+        s,
+        DetailPage(
+          title: '${c.tr('Next rupee')} · ${c.tr('Ward {w}', {'w': _q(s, 'ward')})}',
+          heading: false,
+          body: NextRupeeList(_q(s, 'ward')!),
+        ),
       ),
     ),
     // Complaint trail: no ward opens on all Mumbai.
     GoRoute(
       path: '/trail',
-      builder: (_, s) => TrailPage(ward: _q(s, 'ward')),
+      pageBuilder: (_, s) => _page(s, TrailPage(ward: _q(s, 'ward'))),
     ),
     GoRoute(
       path: '/issue',
       redirect: (_, s) => _q(s, 'id') == null ? '/' : null,
-      builder: (_, s) => IssueDetail(_q(s, 'id')!),
+      pageBuilder: (_, s) => _page(s, IssueDetail(_q(s, 'id')!)),
     ),
     // Detail pages that only make sense mid-flow; after a web reload (no extra) they go Home.
     GoRoute(
       path: '/page',
       redirect: (_, s) => s.extra is PanelPage ? null : '/',
-      builder: (_, s) {
+      pageBuilder: (_, s) {
         final p = s.extra! as PanelPage;
-        return DetailPage(title: p.title, body: p.body);
+        return _page(s, DetailPage(title: p.title, body: p.body));
       },
     ),
   ],
