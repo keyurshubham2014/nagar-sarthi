@@ -4,6 +4,8 @@
 /// Never "fraud", "scam", "corrupt" or "overcharged by".
 library;
 
+import 'format.dart';
+
 const String kNeedsReview = 'Needs review';
 const String kToBeClaimed = 'To be claimed and verified';
 const String kNoFlags = 'No flags';
@@ -32,6 +34,21 @@ const Map<String, String> flagShortLabels = {
 };
 
 String flagLabel(String type) => flagLabels[type] ?? type;
+
+String _day(Object? s) => '${s ?? '—'}'.split(' ').first;
+
+/// One plain line on why a flag row needs review, from its evidence.
+String flagReason(Map f) {
+  final e = (f['evidence'] as Map?) ?? const {};
+  return switch (f['type']) {
+    'dlp_paid' => 'Billed ${formatInr(f['cost_inr'] as num? ?? 0)} while under warranty (resurfaced ${_day(e['last_resurfaced'])})',
+    'fix_failed' => 'Re-opened within 30 days of the repair on ${_day(e['completed_at'])}',
+    'over_rate' => 'Billed ${e['ratio'] ?? f['ratio']}× the standard rate (${formatInr(f['cost_inr'] as num? ?? 0)} vs ${formatInr(f['expected_inr'] as num? ?? 0)})',
+    'double_billing' => 'Billed again ${e['days_apart']} days after ${e['previous_work_order_id']}, no complaint linked',
+    'sla_missed' => 'Took longer than the ${e['sla_hours']}-hour standard for ${e['repair_method'] ?? 'this work'}',
+    _ => '${f['reason'] ?? kNeedsReview}',
+  };
+}
 String flagStanding(String type) => type == 'dlp_paid' ? kToBeClaimed : kNeedsReview;
 
 /// Flag types a recovery notice can be drafted for from the ward and road panels.

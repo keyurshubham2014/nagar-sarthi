@@ -3,7 +3,9 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:latlong2/latlong.dart';
 
+import '../../app_router.dart';
 import '../../core/flag_strings.dart';
+import '../../core/prefs.dart';
 import '../../core/format.dart';
 import '../../core/theme/tokens.dart';
 import '../map/map_data.dart';
@@ -25,38 +27,31 @@ const nextRupeeLegend = [
   LegendEntry('Flood hotspot', kHotspot),
 ];
 
-/// Turns on the next-rupee pins for [ward] and shows its ranked list.
+/// Opens the ward's ranked next-rupee list and points the map's pins at that ward.
 void showNextRupee(WidgetRef ref, String ward) {
-  ref.read(panelProvider.notifier).push(_listPage(ward));
+  ref.read(nextRupeeWardProvider.notifier).set(ward);
+  appRouter.push(Uri(path: '/next-rupee', queryParameters: {'ward': ward}).toString());
+}
+
+/// Turns the pins on for [ward] and shows the Map tab.
+void showNextRupeeOnMap(WidgetRef ref, String ward) {
   ref.read(nextRupeeWardProvider.notifier).set(ward);
   ref.read(visibleLayersProvider.notifier).set(nextRupeeLayerId, true);
+  ref.read(mapFocusProvider.notifier).focusWard(ward);
+  appRouter.go('/map');
 }
 
-PanelPage _listPage(String ward) => PanelPage('Next rupee · Ward $ward', NextRupeeList(ward), ward: ward);
-
-/// Pins belong to [ward]: if the top panel page is not that ward's, start a fresh stack at its list.
-void _ensureWardOnTop(WidgetRef ref, String ward) {
-  final pages = ref.read(panelProvider);
-  if (pages.isEmpty || pages.last.ward != ward) ref.read(panelProvider.notifier).open(_listPage(ward));
-}
-
-void _openItem(WidgetRef ref, String ward, Json item) {
-  _ensureWardOnTop(ref, ward);
-  ref.read(panelProvider.notifier).push(PanelPage(
-    '#${item['rank']} · ${item['issue']['category']}, ${item['issue']['locality']}',
-    NextRupeeDetail(item),
-    ward: ward,
-  ));
-}
+void _openItem(WidgetRef ref, String ward, Json item) => pushPanel(PanelPage(
+  '#${item['rank']} · ${item['issue']['category']}, ${item['issue']['locality']}',
+  NextRupeeDetail(item),
+));
 
 /// Several items at one spot: one pin, tap opens a chooser listing them.
 void _openSpot(WidgetRef ref, String ward, List<Json> items) {
   if (items.length == 1) return _openItem(ref, ward, items.single);
-  _ensureWardOnTop(ref, ward);
-  ref.read(panelProvider.notifier).push(PanelPage(
+  pushPanel(PanelPage(
     '${items.length} items at this spot · Ward $ward',
     PanelList(children: [for (final i in items) _ItemRow(item: i, onTap: () => _openItem(ref, ward, i))]),
-    ward: ward,
   ));
 }
 
@@ -69,9 +64,11 @@ class NextRupeeLayer extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final ward = ref.watch(nextRupeeWardProvider);
-    final nr = ward == null ? null : ref.watch(nextRupeeProvider(ward)).value;
-    if (ward == null || nr == null) return const SizedBox.shrink();
+    // Pins for the ward selected on the map, else the one picked from a page, else the chosen ward.
+    final String? selected = ref.watch(mapFocusProvider.select((s) => s.ward));
+    final String ward = selected ?? ref.watch(nextRupeeWardProvider) ?? ref.watch(chosenWardProvider);
+    final nr = ref.watch(nextRupeeProvider(ward)).value;
+    if (nr == null) return const SizedBox.shrink();
 
     Marker place(Map m, IconData icon, Color color, String what) {
       return Marker(
@@ -173,6 +170,13 @@ class NextRupeeList extends ConsumerWidget {
       return PanelList(
         children: [
           Text('Budget left: ${formatInr(nr['remaining_budget'] as num? ?? 0)}', style: t.titleMedium),
+          const SizedBox(height: AppSpacing.s8),
+          OutlinedButton.icon(
+            onPressed: () => showNextRupeeOnMap(ref, ward),
+            icon: const Icon(Icons.map_outlined),
+            label: const Text('Show the pins on the map'),
+          ),
+          const SizedBox(height: AppSpacing.s8),
           Text('Ranked by need: severity, nearby hospitals and schools, accidents, flooding and traffic.',
               style: t.bodySmall?.copyWith(color: c.textSecondary)),
           const SizedBox(height: AppSpacing.s8),

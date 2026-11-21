@@ -1,17 +1,26 @@
 import 'dart:convert';
 
 import 'package:flutter/services.dart';
+import 'package:flutter_map/flutter_map.dart' show LatLngBounds;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:latlong2/latlong.dart';
 
 import '../../core/api/api_client.dart';
 
-/// One ward: polygon from `assets/wards.geojson`, figures from `/api/wards`.
+/// One ward: real boundary from `assets/wards_real.geojson` (OpenCity / Oorvani
+/// Foundation via bharatlas, CC0), name and figures from `/api/wards`.
 class Ward {
-  Ward({required this.code, required this.name, required this.points, required this.data});
+  Ward({required this.code, required this.name, required this.parts, required this.data});
   final String code;
   final String name;
-  final List<LatLng> points;
+
+  /// One entry per polygon (MultiPolygon wards have several); each is [outer ring, ...holes].
+  final List<List<List<LatLng>>> parts;
+
+  /// Largest part's outer ring by point count: where the label goes.
+  late final List<LatLng> mainRing = parts.map((p) => p.first).reduce((a, b) => a.length >= b.length ? a : b);
+
+  late final LatLngBounds bounds = LatLngBounds.fromPoints([for (final p in parts) ...p.first]);
 
   /// The `/api/wards` row (flagged_share, flagged_inr, spend, ...); empty if missing.
   final Map<String, dynamic> data;
@@ -59,7 +68,7 @@ Future<List<dynamic>> _features(String asset) async =>
 final mapDataProvider = FutureProvider<MapData>(retry: (_, _) => null, (ref) async {
   final api = ref.watch(apiClientProvider);
   final results = await Future.wait([
-    _features('assets/wards.geojson'),
+    _features('assets/wards_real.geojson'),
     _features('assets/roads.geojson'),
     api.wards(),
     api.roads(),
@@ -68,13 +77,16 @@ final mapDataProvider = FutureProvider<MapData>(retry: (_, _) => null, (ref) asy
   final wardRows = {for (final w in results[2] as List) w['code'] as String: w as Map<String, dynamic>};
   final roadRows = {for (final r in results[3] as List) r['road_id'] as String: r as Map<String, dynamic>};
 
+  List<List<LatLng>> polygon(List rings) => [for (final r in rings) [for (final p in r as List) _ll(p)]];
   final wards = [
     for (final f in results[0] as List)
       Ward(
         code: f['properties']['ward_code'] as String,
-        name: f['properties']['ward_name'] as String,
-        // Outer ring only; the ward file has no holes.
-        points: [for (final p in f['geometry']['coordinates'][0] as List) _ll(p)],
+        // The boundary file has no names: they come from the API.
+        name: wardRows[f['properties']['ward_code']]?['name'] as String? ?? f['properties']['ward_code'] as String,
+        parts: f['geometry']['type'] == 'MultiPolygon'
+            ? [for (final poly in f['geometry']['coordinates'] as List) polygon(poly as List)]
+            : [polygon(f['geometry']['coordinates'] as List)],
         data: wardRows[f['properties']['ward_code']] ?? const {},
       ),
   ];

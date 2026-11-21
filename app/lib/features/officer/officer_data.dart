@@ -1,7 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/api/api_client.dart';
-import 'panel.dart';
 
 // No auto-retry: failures show the panel's error state with its Retry button at once.
 Duration? _noRetry(int _, Object _) => null;
@@ -18,14 +17,18 @@ final roadDetailProvider = FutureProvider.family<Json, String>(
   (ref, id) => ref.watch(apiClientProvider).road(id),
 );
 
+// A road has far fewer than 100 flag rows, so one page holds them all.
 final roadFlagsProvider = FutureProvider.family<List<dynamic>, String>(
   retry: _noRetry,
-  (ref, id) => ref.watch(apiClientProvider).flags(road: id),
+  (ref, id) async => (await ref.watch(apiClientProvider).flags(road: id, limit: 100))['items'] as List,
 );
 
-final wardFlagsProvider = FutureProvider.family<List<dynamic>, ({String ward, String type})>(
+/// Money flags only (no timing-only sla_missed), biggest first: Home's "Needs your attention".
+final topFlagsProvider = FutureProvider.family<List<dynamic>, String>(
   retry: _noRetry,
-  (ref, q) => ref.watch(apiClientProvider).flags(ward: q.ward, type: q.type),
+  (ref, ward) async =>
+      (await ref.watch(apiClientProvider).flags(ward: ward, type: 'dlp_paid,fix_failed,over_rate,double_billing', limit: 5))['items']
+          as List,
 );
 
 final nextRupeeProvider = FutureProvider.family<Json, String>(
@@ -33,17 +36,10 @@ final nextRupeeProvider = FutureProvider.family<Json, String>(
   (ref, ward) => ref.watch(apiClientProvider).nextRupee(ward),
 );
 
-/// Ward whose next-rupee pins are on the map (null: none chosen yet).
-/// Cleared as soon as no open panel page belongs to that ward (panel closed,
-/// or another ward opened), so pins never outlive their ward's panel.
+/// Ward whose next-rupee pins are on the map (null: the ward selected on the map, else the chosen ward).
 class NextRupeeWard extends Notifier<String?> {
   @override
-  String? build() {
-    ref.listen(panelProvider, (_, pages) {
-      if (state != null && !pages.any((p) => p.ward == state)) state = null;
-    });
-    return null;
-  }
+  String? build() => null;
 
   void set(String? ward) => state = ward;
 }

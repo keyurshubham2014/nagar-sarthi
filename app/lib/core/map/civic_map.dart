@@ -28,7 +28,19 @@ class CivicMap extends StatelessWidget {
     this.mapController,
     this.onTilesFailed,
     this.onTileLoaded,
+    this.initialCameraFit,
+    this.onTap,
+    this.onMapReady,
   });
+
+  /// The camera exists (fitCamera may be called from now on).
+  final VoidCallback? onMapReady;
+
+  /// Overrides [center] / [initialZoom] when set (e.g. fit all of Mumbai).
+  final CameraFit? initialCameraFit;
+
+  /// Tap on the map where no layer handled it.
+  final VoidCallback? onTap;
 
   final String semanticLabel;
   final LatLng center;
@@ -64,6 +76,9 @@ class CivicMap extends StatelessWidget {
           options: MapOptions(
             initialCenter: center,
             initialZoom: initialZoom,
+            initialCameraFit: initialCameraFit,
+            onTap: onTap == null ? null : (_, _) => onTap!(),
+            onMapReady: onMapReady,
             minZoom: 9,
             maxZoom: 18,
             interactionOptions: const InteractionOptions(
@@ -82,8 +97,19 @@ class CivicMap extends StatelessWidget {
               },
             ),
             ...layers,
-            const SimpleAttributionWidget(
-              source: Text('OpenStreetMap contributors'),
+            // Wraps on narrow phones instead of cutting the credit off.
+            Align(
+              alignment: Alignment.bottomRight,
+              child: Container(
+                margin: const EdgeInsets.only(left: 64),
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                color: c.surface.withValues(alpha: 0.85),
+                child: Text(
+                  '© OpenStreetMap contributors · Ward boundaries: OpenCity / Oorvani Foundation via bharatlas (CC0)',
+                  textAlign: TextAlign.right,
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(fontSize: 10, height: 1.3),
+                ),
+              ),
             ),
           ],
         ),

@@ -7,7 +7,6 @@ import 'package:go_router/go_router.dart';
 import '../../core/api/api_client.dart';
 import '../../core/auth/session.dart';
 import '../../core/theme/tokens.dart';
-import '../citizen/citizen_panels.dart';
 
 /// Phone + demo code sign-in. Pops `true` on success.
 class SignInScreen extends ConsumerStatefulWidget {
@@ -146,57 +145,6 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
               ),
             ],
           ),
-        ),
-      ),
-    );
-  }
-}
-
-/// App bar chip: current role, with demo switches (two taps), switch account and sign out.
-class RoleMenu extends ConsumerWidget {
-  const RoleMenu({super.key});
-
-  Future<void> _signedIn(BuildContext context, WidgetRef ref, Session s) async {
-    // The citizen's home is the citizen hub.
-    if (s.role == 'citizen' && context.mounted) openCitizenHub(context);
-  }
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final s = ref.watch(sessionProvider);
-    return PopupMenuButton<String>(
-      tooltip: s == null ? 'Sign in' : 'Signed in as ${roleLabels[s.role]}',
-      onSelected: (v) async {
-        final notifier = ref.read(sessionProvider.notifier);
-        if (v == 'out') return notifier.signOut();
-        if (v == 'switch') {
-          final ok = await context.push<bool>('/sign-in');
-          final now = ref.read(sessionProvider);
-          if (ok == true && now != null && context.mounted) await _signedIn(context, ref, now);
-          return;
-        }
-        try {
-          final now = await notifier.signInAsDemo(v);
-          if (context.mounted) await _signedIn(context, ref, now);
-        } on ApiException catch (e) {
-          if (context.mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Could not sign in: ${e.message}')));
-          }
-        }
-      },
-      itemBuilder: (_) => [
-        if (s != null)
-          PopupMenuItem(enabled: false, child: Text('${context.tr(roleLabels[s.role]!)} · ${s.phone}${s.ward == null ? '' : ' · ${context.tr('Ward {w}', {'w': s.ward})}'}')),
-        for (final e in roleLabels.entries)
-          if (s?.role != e.key) PopupMenuItem(value: e.key, child: Text('Demo: ${context.tr(e.value)}')),
-        PopupMenuItem(value: 'switch', child: Text(context.tr(s == null ? 'Sign in with a number…' : 'Switch account…'))),
-        if (s != null) PopupMenuItem(value: 'out', child: Text(context.tr('Sign out'))),
-      ],
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.s4),
-        child: Chip(
-          avatar: Icon(s == null ? Icons.login : Icons.person_outline, size: 18),
-          label: Text(context.tr(s == null ? 'Sign in' : roleLabels[s.role] ?? s.role)),
         ),
       ),
     );

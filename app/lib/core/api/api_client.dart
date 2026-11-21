@@ -136,11 +136,28 @@ class ApiClient {
     ),
   );
 
-  /// Flag rows from audit.json, filtered by any of ward, road and type.
-  Future<List<dynamic>> flags({String? ward, String? road, String? type}) => _call(
-    () => _dio.get<List<dynamic>>(
+  /// Flag rows, biggest rupees first: {total, total_inr, items[]} (items carry road_name).
+  /// [type] may be comma-separated; [q] matches work order id or road name; [limit] is at most 100.
+  Future<Map<String, dynamic>> flags({
+    String? ward,
+    String? road,
+    String? type,
+    String? contractor,
+    String? q,
+    int offset = 0,
+    int limit = 50,
+  }) => _call(
+    () => _dio.get(
       '/api/flags',
-      queryParameters: {'ward': ?ward, 'road': ?road, 'type': ?type},
+      queryParameters: {
+        'ward': ?ward,
+        'road': ?road,
+        'type': ?type,
+        'contractor': ?contractor,
+        'q': ?q,
+        'offset': offset,
+        'limit': limit,
+      },
     ),
   );
 

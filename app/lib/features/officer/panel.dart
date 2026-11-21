@@ -1,142 +1,56 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
+import '../../app_router.dart';
 import '../../core/i18n.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../core/widgets/saarthee.dart';
 
 import '../../core/flag_strings.dart';
 import '../../core/format.dart';
 import '../../core/theme/tokens.dart';
 
-/// Below this width panels are a draggable bottom sheet; at or above, a side panel.
-const double kSidePanelBreakpoint = 900;
-
-/// One page in the officer panel. [body] builds a `ListView(primary: true)`
-/// (use [PanelList]) so the host can drive its scrolling.
+/// One detail page: a title and a body that builds a `ListView(primary: true)` (use [PanelList]).
+/// Pushed full screen above the tabs with [pushPanel].
 class PanelPage {
-  const PanelPage(this.title, this.body, {this.ward});
+  const PanelPage(this.title, this.body);
   final String title;
   final Widget body;
-
-  /// Ward this page belongs to, if any. Next-rupee pins stay only while a page for their ward is open.
-  final String? ward;
 }
 
-/// The officer panel is a stack of pages: [open] replaces it, [push] drills in,
-/// the header's back button pops. The map stays live underneath.
-class PanelStack extends Notifier<List<PanelPage>> {
+/// Opens [page] as a full-screen detail page (back arrow returns to the tab underneath).
+void pushPanel(PanelPage page) => appRouter.push('/page', extra: page);
+
+/// Full-screen page for a [PanelPage]: Saarthee app bar with back arrow, body below.
+class DetailPage extends StatelessWidget {
+  const DetailPage({super.key, required this.title, required this.body, this.subtitle, this.actions = const []});
+  final String title;
+  final String? subtitle;
+  final Widget body;
+  final List<Widget> actions;
   @override
-  List<PanelPage> build() => const [];
-  void open(PanelPage p) => state = [p];
-  void push(PanelPage p) => state = [...state, p];
-  void pop() => state = state.sublist(0, state.length - 1);
-  void close() => state = const [];
+  Widget build(BuildContext context) => Scaffold(
+    appBar: SaartheeAppBar(title: context.tr(title), subtitle: subtitle, actions: actions),
+    body: body,
+  );
 }
 
-final panelProvider = NotifierProvider<PanelStack, List<PanelPage>>(PanelStack.new);
-
-/// Lives in the map home's Stack; shows the top page of [panelProvider].
-class PanelHost extends ConsumerStatefulWidget {
-  const PanelHost({super.key});
-  @override
-  ConsumerState<PanelHost> createState() => _PanelHostState();
-}
-
-class _PanelHostState extends ConsumerState<PanelHost> {
-  final _sideScroll = ScrollController();
-
-  @override
-  void dispose() {
-    _sideScroll.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final stack = ref.watch(panelProvider);
-    if (stack.isEmpty) return const SizedBox.shrink();
-    final page = stack.last;
-    final c = SaartheeColors.of(context);
-
-    Widget content(ScrollController sc) => Material(
-      color: c.surface,
-      elevation: 6,
-      borderRadius: MediaQuery.sizeOf(context).width >= kSidePanelBreakpoint
-          ? AppRadii.cardRadius
-          : AppRadii.sheetTop,
-      clipBehavior: Clip.antiAlias,
-      child: Column(
-        children: [
-          _Header(page: page, canPop: stack.length > 1),
-          const Divider(height: 1),
-          Expanded(
-            child: PrimaryScrollController(
-              controller: sc,
-              // Key per page so each page starts at the top.
-              child: KeyedSubtree(key: ObjectKey(page), child: page.body),
-            ),
-          ),
-        ],
-      ),
-    );
-
-    if (MediaQuery.sizeOf(context).width >= kSidePanelBreakpoint) {
-      return Align(
-        alignment: Alignment.topRight,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(0, 56, AppSpacing.s8, AppSpacing.s8),
-          child: SizedBox(width: 420, child: content(_sideScroll)),
-        ),
-      );
-    }
-    return DraggableScrollableSheet(
-      initialChildSize: 0.55,
-      minChildSize: 0.15,
-      maxChildSize: 0.95,
-      snap: true,
-      builder: (context, sc) => content(sc),
-    );
-  }
-}
-
-class _Header extends ConsumerWidget {
-  const _Header({required this.page, required this.canPop});
-  final PanelPage page;
-  final bool canPop;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final n = ref.read(panelProvider.notifier);
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(AppSpacing.s4, AppSpacing.s4, AppSpacing.s4, AppSpacing.s4),
-      child: Row(
-        children: [
-          if (canPop)
-            IconButton(tooltip: 'Back', icon: const Icon(Icons.arrow_back), onPressed: n.pop)
-          else
-            const SizedBox(width: AppSpacing.s12),
-          Expanded(
-            child: Text(
-              context.tr(page.title),
-              style: Theme.of(context).textTheme.titleMedium,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-          IconButton(tooltip: 'Close panel', icon: const Icon(Icons.close), onPressed: n.close),
-        ],
-      ),
-    );
-  }
-}
-
-/// Scrollable page body driven by the host's scroll controller.
+/// Scrollable page body, capped at the content width so wide screens do not stretch it.
 class PanelList extends StatelessWidget {
-  const PanelList({super.key, required this.children});
+  const PanelList({super.key, required this.children, this.controller});
   final List<Widget> children;
+  final ScrollController? controller;
   @override
-  Widget build(BuildContext context) => ListView(
-    primary: true,
-    padding: const EdgeInsets.fromLTRB(AppSpacing.gutter, AppSpacing.s8, AppSpacing.gutter, AppSpacing.s32),
-    children: children,
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, box) {
+      final side = math.max(AppSpacing.gutter, (box.maxWidth - AppSpacing.maxContent) / 2 + AppSpacing.gutter);
+      return ListView(
+        controller: controller,
+        primary: controller == null,
+        padding: EdgeInsets.fromLTRB(side, AppSpacing.s16, side, AppSpacing.s32),
+        children: children,
+      );
+    },
   );
 }
 

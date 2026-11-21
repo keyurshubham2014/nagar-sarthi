@@ -1,12 +1,15 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import '../i18n.dart';
+import '../prefs.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../app_router.dart';
 import '../api/api_client.dart';
 
-/// Signed-in user. Held in memory only: survives navigation, not an app restart.
+/// Signed-in user. Saved in shared preferences, so it survives an app restart; a 401 clears it.
 typedef Session = ({String token, String role, String phone, String? ward});
 
 const Map<String, String> roleLabels = {'citizen': 'Citizen', 'corporator': 'Corporator', 'officer': 'Ward officer'};
@@ -16,12 +19,33 @@ final rootMessengerKey = GlobalKey<ScaffoldMessengerState>();
 
 class SessionNotifier extends Notifier<Session?> {
   @override
-  Session? build() => null;
+  Session? build() {
+    final raw = ref.read(prefsProvider).getString('session');
+    if (raw == null) return null;
+    try {
+      final m = jsonDecode(raw) as Map<String, dynamic>;
+      return (token: m['token'] as String, role: m['role'] as String, phone: m['phone'] as String, ward: m['ward'] as String?);
+    } catch (_) {
+      return null; // unreadable: treat as signed out
+    }
+  }
+
+  void _save(Session? s) {
+    state = s;
+    final prefs = ref.read(prefsProvider);
+    if (s == null) {
+      prefs.remove('session');
+    } else {
+      prefs.setString('session', jsonEncode({'token': s.token, 'role': s.role, 'phone': s.phone, 'ward': s.ward}));
+    }
+  }
 
   Future<Session> signIn(String phone, String code) async {
     final r = await ref.read(apiClientProvider).login(phone, code);
     final s = (token: r['token'] as String, role: r['role'] as String, phone: r['phone'] as String, ward: r['ward_code'] as String?);
-    state = s;
+    _save(s);
+    // Staff work on their own ward: make it the chosen ward.
+    if (s.ward != null && s.role != 'citizen') ref.read(chosenWardProvider.notifier).set(s.ward!);
     return s;
   }
 
@@ -31,12 +55,12 @@ class SessionNotifier extends Notifier<Session?> {
     return signIn((demo['users'] as Map)[role] as String, demo['code'] as String);
   }
 
-  void signOut() => state = null;
+  void signOut() => _save(null);
 
   /// The server rejected the token: clear it and offer sign-in.
   void expired() {
     if (state == null) return;
-    state = null;
+    _save(null);
     rootMessengerKey.currentState?.showSnackBar(
       SnackBar(
         content: const Text('Your session has ended. Sign in again to continue.'),

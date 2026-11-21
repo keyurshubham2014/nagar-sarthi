@@ -9,7 +9,6 @@ import 'package:latlong2/latlong.dart';
 import '../../core/api/api_client.dart';
 import '../../core/flag_strings.dart';
 import '../../core/theme/tokens.dart';
-import '../officer/panel.dart';
 import 'map_data.dart';
 import 'map_layers.dart';
 
@@ -230,12 +229,10 @@ class MonsoonDotLayer extends ConsumerWidget {
 
 /// Bottom bar: play/pause/replay, slider, date, rain and running counters.
 class MonsoonBar extends ConsumerWidget {
-  const MonsoonBar({super.key, required this.wide});
-  final bool wide;
+  const MonsoonBar({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    if (!wide && ref.watch(panelProvider.select((p) => p.isNotEmpty))) return const SizedBox.shrink();
     final t = Theme.of(context).textTheme;
     final async = ref.watch(seasonProvider);
     final s = ref.watch(monsoonProvider);

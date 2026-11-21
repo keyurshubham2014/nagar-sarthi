@@ -2,17 +2,18 @@ import 'package:flutter/material.dart';
 import '../../core/i18n.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../app_router.dart';
 import '../../core/api/api_client.dart';
 import '../../core/auth/session.dart';
 import '../../core/flag_strings.dart';
 import '../../core/format.dart';
 import '../../core/theme/tokens.dart';
 import '../../core/widgets/claude_draft_sheet.dart';
+import '../../core/widgets/saarthee.dart';
 import '../map/map_data.dart';
 import '../officer/officer_data.dart';
 import '../officer/officer_panels.dart';
 import '../officer/panel.dart';
-import 'report_card.dart';
 
 // Citizen flow (TASK-06): raise, track, share, ask. Pages live in the shared panel host.
 
@@ -28,36 +29,32 @@ final complaintsAtProvider = FutureProvider.family<Json, String>(
   (ref, loc) => ref.watch(apiClientProvider).complaintsAt(loc),
 );
 
-PanelStack _panel(BuildContext context) => ProviderScope.containerOf(context, listen: false).read(panelProvider.notifier);
-
-void openCitizenHub(BuildContext context) => _panel(context).open(const PanelPage(kCitizenHubTitle, CitizenHub()));
-void _push(BuildContext context, String title, Widget body) => _panel(context).push(PanelPage(title, body));
-void pushComplaint(BuildContext context, String id) => _push(context, 'Complaint $id', ComplaintDetail(id));
+void pushComplaint(BuildContext context, String id) => appRouter.push(Uri(path: '/complaint', queryParameters: {'id': id}).toString());
 
 String _day(dynamic s) => s == null ? '—' : '$s'.substring(0, '$s'.length >= 10 ? 10 : '$s'.length);
 String _plain(dynamic name) => '${name ?? '—'}'.replaceAll(' (synthetic)', '');
 
-// ------------------------------------------------------------------- hub
+// ---------------------------------------------------------------- report tab
 
-class CitizenHub extends StatelessWidget {
-  const CitizenHub({super.key});
+/// Report tab (citizens and visitors): describe, understand, matches, add my voice or file as new.
+class ReportScreen extends StatelessWidget {
+  const ReportScreen({super.key});
   @override
-  Widget build(BuildContext context) {
-    Widget tile(IconData icon, String title, String sub, VoidCallback onTap) => Card(
-      child: ListTile(leading: Icon(icon), title: Text(context.tr(title)), subtitle: Text(context.tr(sub)), trailing: const Icon(Icons.chevron_right), onTap: onTap),
-    );
-    return PanelList(
-      children: [
-        tile(Icons.edit_note, kReportProblem, 'In your own words. See if neighbours already raised it.',
-            () => _push(context, kReportProblem, const IntakePage())),
-        tile(Icons.timeline, kTrackComplaint, 'By complaint id or by locality.', () => _push(context, kTrackComplaint, const TrackPage())),
-        tile(Icons.ios_share, kReportCard, 'A shareable card of your ward’s road repairs.',
-            () => _push(context, kReportCard, const ReportCardPage())),
-        tile(Icons.question_answer_outlined, kAskWard, 'A polite question to the ward office, with the figures.',
-            () => _push(context, kAskWard, const AskWardPage())),
+  Widget build(BuildContext context) => Scaffold(
+    appBar: SaartheeAppBar(
+      title: context.tr(kReportProblem),
+      subtitle: context.tr('In your own words. See if neighbours already raised it.'),
+      showBack: false,
+      actions: [
+        TextButton.icon(
+          onPressed: () => appRouter.push('/track'),
+          icon: const Icon(Icons.timeline),
+          label: Text(context.tr('Track')),
+        ),
       ],
-    );
-  }
+    ),
+    body: const IntakePage(),
+  );
 }
 
 // ---------------------------------------------------------------- intake
@@ -550,7 +547,7 @@ class ComplaintDetail extends ConsumerWidget {
           ),
           const SizedBox(height: AppSpacing.s8),
           OutlinedButton.icon(
-            onPressed: () => _push(context, '${wo['road_name']}', RoadPanel(wo['road_id'] as String)),
+            onPressed: () => openRoad(wo['road_id'] as String, wo: wo['id'] as String?),
             icon: const Icon(Icons.alt_route),
             label: Text(context.tr('Open road: {r}', {'r': wo['road_name']})),
           ),

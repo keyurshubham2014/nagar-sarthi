@@ -1,14 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../app_router.dart';
 import '../../core/api/api_client.dart';
+import '../../core/prefs.dart';
+import '../../core/widgets/saarthee.dart';
 import '../../core/flag_strings.dart';
 import '../../core/format.dart';
 import '../../core/theme/tokens.dart';
 import '../../core/widgets/claude_draft_sheet.dart';
 import '../../core/widgets/scorecard_stat_tile.dart';
 import '../officer/officer_data.dart' show Json;
-import '../officer/officer_panels.dart' show RoadPanel;
+import '../officer/officer_panels.dart' show openRoad;
 import '../officer/panel.dart';
 
 // Corporator flow: fair contractor scorecards and the ward brief. Every figure
@@ -28,11 +31,6 @@ final measureWorkOrdersProvider = FutureProvider.family<Json, MeasureQuery>(
   (ref, q) => ref.watch(apiClientProvider).contractorWorkOrders(q.id, q.metric, ward: q.ward),
 );
 
-/// City-wide scorecards as the only panel page (from the map home).
-void openScorecards(BuildContext context) => ProviderScope.containerOf(context, listen: false)
-    .read(panelProvider.notifier)
-    .open(const PanelPage(kScorecardsTitle, ScorecardList()));
-
 /// One-page ward brief in English, Hindi or Marathi; the server picks the figures.
 void showWardBrief(BuildContext context, String code) => showClaudeDraftSheet(
   context,
@@ -45,8 +43,9 @@ void showWardBrief(BuildContext context, String code) => showClaudeDraftSheet(
 
 /// Contractors A to Z with three like-for-like measures; [ward] scopes to one ward.
 class ScorecardList extends ConsumerWidget {
-  const ScorecardList({super.key, this.ward});
+  const ScorecardList({super.key, this.ward, this.header});
   final String? ward;
+  final Widget? header;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) => asyncPage(
@@ -59,13 +58,87 @@ class ScorecardList extends ConsumerWidget {
       }
       return PanelList(
         children: [
+          ?header,
           const _FairnessNote(),
           const SizedBox(height: AppSpacing.s12),
-          for (final r in rows) _ScorecardCard(row: r as Json, ward: ward),
+          for (final r in rows) _ContractorRow(row: r as Json, ward: ward),
         ],
       );
     },
   );
+}
+
+/// One contractor in the A–Z list: name, jobs and spend (or "not rated"); opens the scorecard page.
+class _ContractorRow extends StatelessWidget {
+  const _ContractorRow({required this.row, required this.ward});
+  final Json row;
+  final String? ward;
+  @override
+  Widget build(BuildContext context) {
+    final rated = row['rated'] == true;
+    final spend = row['spend'] as num?;
+    return NavCard(
+      icon: Icons.engineering_outlined,
+      title: '${row['name']}',
+      subtitle: rated ? '${row['jobs']} jobs${spend == null ? '' : ' · ${formatInr(spend)}'}' : kNotRatedInWard,
+      onTap: () => appRouter.push(Uri(path: '/contractor', queryParameters: {'id': '${row['id']}', 'ward': ?ward}).toString()),
+    );
+  }
+}
+
+/// Contractors tab: the A–Z scorecard list for all Mumbai or the chosen ward.
+class ContractorsScreen extends ConsumerStatefulWidget {
+  const ContractorsScreen({super.key});
+  @override
+  ConsumerState<ContractorsScreen> createState() => _ContractorsScreenState();
+}
+
+class _ContractorsScreenState extends ConsumerState<ContractorsScreen> {
+  bool _inWard = false;
+  @override
+  Widget build(BuildContext context) {
+    final ward = ref.watch(chosenWardProvider);
+    return Scaffold(
+      appBar: const SaartheeAppBar(title: 'Contractors', subtitle: 'A to Z · not a ranking', showBack: false),
+      body: ScorecardList(
+        key: ValueKey('$_inWard$ward'),
+        ward: _inWard ? ward : null,
+        header: Padding(
+          padding: const EdgeInsets.only(bottom: AppSpacing.s12),
+          child: Wrap(
+            spacing: AppSpacing.s8,
+            children: [
+              ChoiceChip(label: const Text('All Mumbai'), selected: !_inWard, onSelected: (_) => setState(() => _inWard = false)),
+              ChoiceChip(label: Text('Ward $ward'), selected: _inWard, onSelected: (_) => setState(() => _inWard = true)),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// One contractor's scorecard as a page (from the list, Home or a ward).
+class ContractorPage extends ConsumerWidget {
+  const ContractorPage({super.key, required this.id, this.ward});
+  final String id;
+  final String? ward;
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final v = ref.watch(scorecardsProvider(ward));
+    final row = [...?(v.value?['contractors'] as List?)].cast<Json>().where((r) => r['id'] == id).firstOrNull;
+    return DetailPage(
+      title: row == null ? kScorecardsTitle : '${row['name']}',
+      subtitle: ward == null ? 'Across Mumbai' : 'In Ward $ward',
+      body: asyncPage(
+        v,
+        onRetry: () => ref.invalidate(scorecardsProvider(ward)),
+        data: (_) => row == null
+            ? const PanelMessage.empty('No scorecard for this contractor here.')
+            : PanelList(children: [_ScorecardCard(row: row, ward: ward), const _FairnessNote()]),
+      ),
+    );
+  }
 }
 
 class _FairnessNote extends StatelessWidget {
@@ -113,14 +186,11 @@ class _ScorecardCard extends ConsumerWidget {
     final spend = row['spend'] as num?;
     final where = ward == null ? 'across Mumbai' : 'in Ward $ward';
 
-    return Card(
-      margin: const EdgeInsets.only(bottom: AppSpacing.s12),
-      child: Padding(
-        padding: const EdgeInsets.all(AppSpacing.s12),
-        child: Column(
+    return Padding(
+      padding: const EdgeInsets.only(bottom: AppSpacing.s12),
+      child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('${row['name']}', style: t.titleMedium),
             // Not rated: show only the reason, no figures at all.
             if (rated)
               Text(
@@ -163,7 +233,6 @@ class _ScorecardCard extends ConsumerWidget {
             ],
           ],
         ),
-      ),
     );
   }
 }
@@ -199,7 +268,7 @@ class _Measure extends ConsumerWidget {
             '$kTypicalSameWork ${formatPercent(typical)}. Show the $count work orders behind it.',
         child: InkWell(
           borderRadius: AppRadii.controlRadius,
-          onTap: () => ref.read(panelProvider.notifier).push(
+          onTap: () => pushPanel(
             PanelPage('${def.listed} · ${ward == null ? 'Mumbai' : 'Ward $ward'}', MeasureWorkOrders(q: (id: id, metric: metric, ward: ward))),
           ),
           child: ExcludeSemantics(
@@ -341,7 +410,7 @@ class _WorkOrderRow extends ConsumerWidget {
           ],
         ),
         trailing: const Icon(Icons.chevron_right),
-        onTap: () => ref.read(panelProvider.notifier).push(PanelPage('${w['road_name']}', RoadPanel('${w['road_id']}'))),
+        onTap: () => openRoad('${w['road_id']}', wo: '${w['id']}'),
       ),
     );
   }

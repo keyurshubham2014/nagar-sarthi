@@ -7,10 +7,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../api/api_client.dart';
 import '../theme/tokens.dart';
+import 'saarthee.dart';
 
-/// Asks the server's Claude [feature] for a draft and shows it editable, with
-/// Copy and Redraft. The server builds the prompt from [body]; send ids, not figures.
-/// Reusable for any drafting feature (notice, brief...).
+/// Asks the server's Claude [feature] for a draft and shows it editable on a
+/// full-screen page, with Copy and Redraft. The server builds the prompt from
+/// [body]; send ids, not figures. Reusable for any drafting feature (notice, brief...).
 Future<void> showClaudeDraftSheet(
   BuildContext context, {
   required String title,
@@ -18,12 +19,18 @@ Future<void> showClaudeDraftSheet(
   required Map<String, dynamic> body,
   Map<String, String>? languages,
   String textLabel = 'Draft letter (editable)',
-}) => showModalBottomSheet<void>(
-  context: context,
-  isScrollControlled: true,
-  useSafeArea: true,
-  constraints: const BoxConstraints(maxWidth: 760),
-  builder: (_) => _DraftSheet(title: title, feature: feature, body: body, languages: languages, textLabel: textLabel),
+}) => Navigator.of(context, rootNavigator: true).push<void>(
+  MaterialPageRoute(
+    builder: (_) => Scaffold(
+      appBar: SaartheeAppBar(title: title),
+      body: SafeArea(
+        child: ContentWidth(
+          padded: false,
+          child: _DraftSheet(title: title, feature: feature, body: body, languages: languages, textLabel: textLabel),
+        ),
+      ),
+    ),
+  ),
 );
 
 class _DraftSheet extends ConsumerStatefulWidget {
@@ -105,28 +112,24 @@ class _DraftSheetState extends ConsumerState<_DraftSheet> {
     return Padding(
       padding: EdgeInsets.fromLTRB(
         AppSpacing.gutter,
-        AppSpacing.s8,
+        AppSpacing.s12,
         AppSpacing.gutter,
-        AppSpacing.s16 + MediaQuery.viewInsetsOf(context).bottom,
+        AppSpacing.s16,
       ),
       child: Column(
-        mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Row(
-            children: [
-              Expanded(child: Text(widget.title, style: t.titleLarge)),
-              if (hasText)
-                _Badge(
-                  _source == 'live' ? 'Drafted live by Claude' : 'Saved draft',
-                  _source == 'live' ? c.successTint : c.warningTint,
-                  _source == 'live' ? c.success : c.warning,
-                ),
-              IconButton(tooltip: 'Close', icon: const Icon(Icons.close), onPressed: () => Navigator.pop(context)),
-            ],
-          ),
+          if (hasText)
+            Align(
+              alignment: Alignment.centerLeft,
+              child: _Badge(
+                _source == 'live' ? 'Drafted live by Claude' : 'Saved draft',
+                _source == 'live' ? c.successTint : c.warningTint,
+                _source == 'live' ? c.success : c.warning,
+              ),
+            ),
           if (widget.languages case final langs?) ...[
-            const SizedBox(height: AppSpacing.s4),
+            const SizedBox(height: AppSpacing.s8),
             SegmentedButton<String>(
               segments: [for (final e in langs.entries) ButtonSegment(value: e.key, label: Text(e.value))],
               selected: {_lang!},
@@ -140,8 +143,7 @@ class _DraftSheetState extends ConsumerState<_DraftSheet> {
             ),
           ],
           const SizedBox(height: AppSpacing.s8),
-          SizedBox(
-            height: MediaQuery.sizeOf(context).height * 0.55,
+          Expanded(
             child: _busy
                 ? Column(
                     mainAxisAlignment: MainAxisAlignment.center,

@@ -2,11 +2,15 @@ import 'package:flutter/material.dart';
 import '../../core/i18n.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../app_router.dart';
 import '../../core/auth/session.dart';
 import '../../core/flag_strings.dart';
 import '../../core/format.dart';
 import '../../core/theme/tokens.dart';
 import '../../core/widgets/claude_draft_sheet.dart';
+import '../../core/widgets/saarthee.dart';
+import '../audit/audit_screen.dart';
+import '../citizen/citizen_panels.dart';
 import '../citizen/report_card.dart';
 import '../corporator/corporator_panels.dart';
 import '../map/map_data.dart';
@@ -15,14 +19,11 @@ import 'next_rupee.dart';
 import 'officer_data.dart';
 import 'panel.dart';
 
-PanelStack _panel(BuildContext context) => ProviderScope.containerOf(context, listen: false).read(panelProvider.notifier);
+/// Ward page (money trail). Ward codes can contain a slash, so they travel as a query parameter.
+void openWard(String code) => appRouter.push(Uri(path: '/ward', queryParameters: {'code': code}).toString());
 
-/// Opens the ward money trail as the only panel page.
-void openWardPanel(BuildContext context, String code, String name) =>
-    _panel(context).open(PanelPage('Ward $code · $name', WardPanel(code), ward: code));
-
-void openRoadPanel(BuildContext context, String id, String name) =>
-    _panel(context).open(PanelPage(name, RoadPanel(id)));
+/// Road page; [wo] scrolls to that work order and opens its evidence.
+void openRoad(String id, {String? wo}) => appRouter.push(Uri(path: '/road', queryParameters: {'id': id, 'wo': ?wo}).toString());
 
 /// Recovery notice for one flag type on a road or across a ward. The server
 /// picks the flag rows; the client sends only the scope.
@@ -51,8 +52,11 @@ Widget _flagDot(String type) => Container(
 // ---------------------------------------------------------------- ward panel
 
 class WardPanel extends ConsumerWidget {
-  const WardPanel(this.code, {super.key});
+  const WardPanel(this.code, {super.key, this.header});
   final String code;
+
+  /// Shown above the figures (My Ward's change-ward card).
+  final Widget? header;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) => asyncPage(
@@ -77,6 +81,7 @@ class WardPanel extends ConsumerWidget {
 
     return PanelList(
       children: [
+        ?header,
         const SectionTitle('Budget and spend'),
         LinearProgressIndicator(
           value: budget <= 0 ? 1 : (spend / budget).clamp(0, 1).toDouble(),
@@ -128,9 +133,7 @@ class WardPanel extends ConsumerWidget {
                 const Icon(Icons.chevron_right),
               ],
             ),
-            onTap: () => ref
-                .read(panelProvider.notifier)
-                .push(PanelPage('${flagLabel(type)} · Ward $code', WardFlagList(ward: code, type: type))),
+            onTap: () => pushPanel(PanelPage('${flagLabel(type)} · Ward $code', AuditList(ward: code, type: type, allowAllMumbai: false))),
           ),
           if (noticeFlagTypes.contains(type) && canDraftNotice(role))
             Align(
@@ -147,56 +150,20 @@ class WardPanel extends ConsumerWidget {
         ],
         if (types.isNotEmpty) Text(kFlagsOverlap, style: t.bodySmall?.copyWith(color: c.textSecondary)),
         const SizedBox(height: AppSpacing.s16),
-        if (role != 'citizen') ...[
-          FilledButton.icon(
-            onPressed: () => showNextRupee(ref, code),
-            icon: const Icon(Icons.place_outlined),
-            label: const Text(kNextRupeeAction),
-          ),
-          const SizedBox(height: AppSpacing.s8),
-        ],
-        // The corporator's tools come first and filled.
-        if (role == 'corporator') ...[
-          FilledButton.icon(
-            onPressed: () => showWardBrief(context, code),
-            icon: const Icon(Icons.description_outlined),
-            label: const Text(kWardBrief),
-          ),
-          const SizedBox(height: AppSpacing.s8),
-          FilledButton.tonalIcon(
-            onPressed: () => ref
-                .read(panelProvider.notifier)
-                .push(PanelPage('$kContractorsInWard · Ward $code', ScorecardList(ward: code))),
-            icon: const Icon(Icons.fact_check_outlined),
-            label: const Text(kContractorsInWard),
-          ),
-          const SizedBox(height: AppSpacing.s8),
-        ],
-        Wrap(
-          spacing: AppSpacing.s8,
-          runSpacing: AppSpacing.s8,
-          children: [
-            if (role != 'corporator') ...[
-              OutlinedButton.icon(
-                onPressed: () => showWardBrief(context, code),
-                icon: const Icon(Icons.description_outlined),
-                label: const Text(kWardBrief),
-              ),
-              OutlinedButton.icon(
-                onPressed: () => ref
-                    .read(panelProvider.notifier)
-                    .push(PanelPage('$kContractorsInWard · Ward $code', ScorecardList(ward: code))),
-                icon: const Icon(Icons.fact_check_outlined),
-                label: const Text(kContractorsInWard),
-              ),
-            ],
-            OutlinedButton.icon(
-              onPressed: () => ref.read(panelProvider.notifier).push(PanelPage(kReportCard, ReportCardPage(ward: code))),
-              icon: const Icon(Icons.ios_share),
-              label: const Text(kReportCard),
-            ),
-          ],
+        // One list of tools; the corporator's brief comes first.
+        SectionHeading(role == 'corporator' ? 'Your tools' : 'More about this ward'),
+        if (role == 'corporator') NavCard(icon: Icons.description_outlined, title: kWardBrief, subtitle: 'One page in English, हिंदी or मराठी', onTap: () => showWardBrief(context, code)),
+        if (role != 'citizen')
+          NavCard(icon: Icons.place_outlined, title: kNextRupeeAction, subtitle: 'Open issues ranked by need, within the budget left', onTap: () => showNextRupee(ref, code)),
+        NavCard(
+          icon: Icons.engineering_outlined,
+          title: kContractorsInWard,
+          subtitle: 'Scorecards, A to Z',
+          onTap: () => pushPanel(PanelPage('$kContractorsInWard · Ward $code', ScorecardList(ward: code))),
         ),
+        if (role != 'corporator') NavCard(icon: Icons.description_outlined, title: kWardBrief, subtitle: 'One page in English, हिंदी or मराठी', onTap: () => showWardBrief(context, code)),
+        NavCard(icon: Icons.ios_share, title: context.tr(kReportCard), subtitle: context.tr('A shareable card of your ward’s road repairs.'), onTap: () => pushPanel(PanelPage(kReportCard, ReportCardPage(ward: code)))),
+        NavCard(icon: Icons.question_answer_outlined, title: context.tr(kAskWard), subtitle: context.tr('A polite question to the ward office, with the figures.'), onTap: () => pushPanel(PanelPage(kAskWard, AskWardPage(ward: code)))),
         const SectionTitle('Top contractors by spend'),
         if (contractors.isEmpty) const Text('No work orders in this ward.'),
         for (final k in contractors)
@@ -221,77 +188,14 @@ class WardPanel extends ConsumerWidget {
   }
 }
 
-/// The work orders behind one flag type in a ward.
-class WardFlagList extends ConsumerWidget {
-  const WardFlagList({super.key, required this.ward, required this.type});
-  final String ward;
-  final String type;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final q = (ward: ward, type: type);
-    return asyncPage(
-      ref.watch(wardFlagsProvider(q)),
-      onRetry: () => ref.invalidate(wardFlagsProvider(q)),
-      data: (flags) {
-        if (flags.isEmpty) return const PanelMessage.empty('No work orders with this flag in this ward.');
-        final roads = ref.watch(mapDataProvider).value?.roadById ?? const {};
-        return PanelList(
-          children: [
-            Text('${flags.length} work orders · ${flagStanding(type)}', style: Theme.of(context).textTheme.bodyMedium),
-            if (noticeFlagTypes.contains(type) && canDraftNotice(ref.watch(sessionProvider)?.role)) ...[
-              const SizedBox(height: AppSpacing.s8),
-              FilledButton.icon(
-                onPressed: () => showNoticeSheet(context, type: type, wardCode: ward),
-                icon: const Icon(Icons.edit_note),
-                label: const Text(kDraftNotice),
-              ),
-            ],
-            const SizedBox(height: AppSpacing.s8),
-            for (final f in flags)
-              _FlagCard(
-                flag: f as Json,
-                roadName: roads[f['road_id']]?.name ?? f['road_id'] as String,
-                onOpenRoad: () => ref
-                    .read(panelProvider.notifier)
-                    .push(PanelPage(roads[f['road_id']]?.name ?? f['road_id'] as String, RoadPanel(f['road_id'] as String))),
-              ),
-          ],
-        );
-      },
-    );
-  }
-}
-
-class _FlagCard extends StatelessWidget {
-  const _FlagCard({required this.flag, required this.roadName, required this.onOpenRoad});
-  final Json flag;
-  final String roadName;
-  final VoidCallback onOpenRoad;
-  @override
-  Widget build(BuildContext context) => Card(
-    margin: const EdgeInsets.only(bottom: AppSpacing.s8),
-    child: ExpansionTile(
-      shape: const Border(),
-      title: Text('${flag['work_order_id']} · ${formatInr(flag['cost_inr'] as num)}'),
-      subtitle: Text('$roadName · ${flag['contractor_name']}'),
-      childrenPadding: const EdgeInsets.fromLTRB(AppSpacing.s16, 0, AppSpacing.s16, AppSpacing.s8),
-      children: [
-        EvidenceTable(flag['evidence'] as Map? ?? const {}),
-        Align(
-          alignment: Alignment.centerRight,
-          child: TextButton.icon(onPressed: onOpenRoad, icon: const Icon(Icons.add_road), label: const Text('Open road')),
-        ),
-      ],
-    ),
-  );
-}
-
 // ---------------------------------------------------------------- road panel
 
 class RoadPanel extends ConsumerWidget {
-  const RoadPanel(this.id, {super.key});
+  const RoadPanel(this.id, {super.key, this.focusWo});
   final String id;
+
+  /// Work order opened from a flag row: shown first with its evidence open, and marked in the timeline.
+  final String? focusWo;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -347,18 +251,79 @@ class RoadPanel extends ConsumerWidget {
             label: Text('$kDraftNotice · ${flagShortLabels[type]}'),
           ),
         ],
-        const SectionTitle('Work orders, oldest first'),
+        if (wos.cast<Json>().where((w) => w['id'] == focusWo).firstOrNull case final focus?) ...[
+          const SectionTitle('The work order you opened'),
+          _WorkOrderCard(wo: focus, flagFor: flagFor, focused: true),
+        ],
+        SectionTitle(context.tr('What happened')),
         if (wos.isEmpty) const Text('No work orders on this road.'),
-        for (final wo in wos) _WorkOrderCard(wo: wo as Json, flagFor: flagFor),
+        for (final (i, wo) in wos.indexed)
+          _TimelineStep(
+            date: '${wo['assigned_at']}'.split(' ').first,
+            color: (wo['flags'] as List? ?? const []).isEmpty ? c.success : flagColor(flagOrder.firstWhere((k) => (wo['flags'] as List).contains(k), orElse: () => 'sla_missed')),
+            last: i == wos.length - 1,
+            child: _WorkOrderCard(wo: wo as Json, flagFor: flagFor, marked: wo['id'] == focusWo),
+          ),
       ],
     );
   }
 }
 
+/// One step of the road's timeline: dot, date, connector line and the work order card.
+class _TimelineStep extends StatelessWidget {
+  const _TimelineStep({required this.date, required this.color, required this.child, this.last = false});
+  final String date;
+  final Color color;
+  final Widget child;
+  final bool last;
+  @override
+  Widget build(BuildContext context) {
+    final c = SaartheeColors.of(context);
+    return IntrinsicHeight(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          SizedBox(
+            width: AppSpacing.s24,
+            child: Column(
+              children: [
+                const SizedBox(height: AppSpacing.s4),
+                Container(
+                  width: AppSpacing.timelineDot,
+                  height: AppSpacing.timelineDot,
+                  decoration: BoxDecoration(shape: BoxShape.circle, color: color),
+                ),
+                if (!last) Expanded(child: Container(width: 2, color: c.border)),
+              ],
+            ),
+          ),
+          const SizedBox(width: AppSpacing.s8),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(date, style: Theme.of(context).textTheme.labelMedium?.copyWith(color: c.textSecondary)),
+                const SizedBox(height: AppSpacing.s4),
+                child,
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _WorkOrderCard extends StatelessWidget {
-  const _WorkOrderCard({required this.wo, required this.flagFor});
+  const _WorkOrderCard({required this.wo, required this.flagFor, this.focused = false, this.marked = false});
   final Json wo;
   final Json? Function(String wo, String type) flagFor;
+
+  /// Evidence open from the start.
+  final bool focused;
+
+  /// Outlined in the timeline (the work order the page was opened for).
+  final bool marked;
 
   @override
   Widget build(BuildContext context) {
@@ -368,7 +333,11 @@ class _WorkOrderCard extends StatelessWidget {
     final onTime = wo['sla_met'] == true;
     final reopened = wo['reopened'] == true;
     return Card(
-      margin: const EdgeInsets.only(bottom: AppSpacing.s8),
+      margin: const EdgeInsets.only(bottom: AppSpacing.s12),
+      shape: RoundedRectangleBorder(
+        borderRadius: AppRadii.cardRadius,
+        side: BorderSide(color: focused || marked ? c.primary : c.border, width: focused || marked ? 2 : 1),
+      ),
       child: Padding(
         padding: const EdgeInsets.fromLTRB(AppSpacing.s12, AppSpacing.s12, AppSpacing.s12, AppSpacing.s4),
         child: Column(
@@ -390,6 +359,8 @@ class _WorkOrderCard extends StatelessWidget {
               children: [
                 Tag(onTime ? 'On time' : 'Slower than typical', bg: onTime ? c.successTint : c.warningTint, fg: onTime ? c.success : c.warning),
                 Tag(reopened ? 'Re-opened' : 'Not re-opened', bg: reopened ? c.errorTint : c.surfaceAlt, fg: reopened ? c.error : c.textSecondary),
+                for (final type in types)
+                  Tag(flagShortLabels[type] ?? type, bg: flagColor(type).withValues(alpha: 0.12), fg: flagColor(type)),
               ],
             ),
             for (final type in types)
@@ -397,6 +368,7 @@ class _WorkOrderCard extends StatelessWidget {
                 shape: const Border(),
                 tilePadding: EdgeInsets.zero,
                 dense: true,
+                initiallyExpanded: focused,
                 leading: _flagDot(type),
                 minTileHeight: 40,
                 title: Text(flagLabel(type)),
@@ -442,7 +414,7 @@ class WarrantyHeroCard extends ConsumerWidget {
       elevation: 3,
       child: InkWell(
         borderRadius: AppRadii.cardRadius,
-        onTap: () => ref.read(panelProvider.notifier).open(PanelPage('Billed under warranty, by ward', DlpWardRanking(data))),
+        onTap: () => pushPanel(PanelPage('Billed under warranty, by ward', DlpWardRanking(data))),
         child: Padding(
           padding: const EdgeInsets.all(AppSpacing.s12),
           child: Row(
@@ -484,7 +456,7 @@ class DlpWardRanking extends ConsumerWidget {
         const SizedBox(height: AppSpacing.s8),
         for (final (i, w) in wards.indexed)
           InkWell(
-            onTap: () => ref.read(panelProvider.notifier).push(PanelPage('Ward ${w.code} · ${w.name}', WardPanel(w.code), ward: w.code)),
+            onTap: () => openWard(w.code),
             child: Padding(
               padding: const EdgeInsets.symmetric(vertical: AppSpacing.s4),
               child: LabelledBar(

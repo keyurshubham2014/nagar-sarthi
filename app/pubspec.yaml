@@ -40,6 +40,7 @@ dependencies:
   go_router: ^18.1.4
   dio: ^5.11.1
   share_plus: ^13.3.1
+  shared_preferences: ^2.5.6
 
 dev_dependencies:
   flutter_test:
@@ -63,7 +64,7 @@ flutter:
   # the material Icons class.
   uses-material-design: true
   assets:
-    - assets/wards.geojson
+    - assets/wards_real.geojson
     - assets/roads.geojson
 
   # To add assets to your application, add an assets section, like this:

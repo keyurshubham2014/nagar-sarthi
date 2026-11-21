@@ -1,14 +1,19 @@
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'prefs.dart';
+
 /// App language for the citizen surfaces, the sign-in screen and the map home.
 /// Officer and corporator panels stay in English (PRD).
 const Map<String, String> appLanguages = {'en': 'English', 'hi': 'हिंदी', 'mr': 'मराठी'};
 
 class LangNotifier extends Notifier<String> {
   @override
-  String build() => 'en';
-  void set(String lang) => state = lang;
+  String build() => ref.read(prefsProvider).getString('lang') ?? 'en';
+  void set(String lang) {
+    state = lang;
+    ref.read(prefsProvider).setString('lang', lang);
+  }
 }
 
 final langProvider = NotifierProvider<LangNotifier, String>(LangNotifier.new);
